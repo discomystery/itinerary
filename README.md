@@ -13,6 +13,8 @@ npm test           # scheduling / hours / reflow logic
 npm run build
 ```
 
+Pushes to `main` deploy automatically to GitHub Pages (`.github/workflows/deploy.yml`).
+
 Data lives in your browser (localStorage). Use **Trip → Share link / Export** to
 send a copy to someone else. It comes pre-loaded with a Helsinki NHL Global Series
 trip; **Trip → Reset** brings it back.
