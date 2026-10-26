@@ -1,0 +1,93 @@
+// Core data model. Times on the schedule are wall-clock minutes in the trip's
+// timezone; `day` is an ISO date (YYYY-MM-DD). Minutes may exceed 1440 for
+// late-night plans that run past midnight.
+
+export type Id = string
+
+export interface Person {
+  id: Id
+  name: string
+  color: string
+}
+
+export type ItemType = 'place' | 'event' | 'reservation' | 'area' | 'transport' | 'note'
+
+export type Interest = 'must' | 'yes' | 'meh' | 'no'
+
+export interface LatLng {
+  lat: number
+  lng: number
+}
+
+/** A labeled moment attached to an item, e.g. "Doors" (soft) or "Puck drop" (hard). */
+export interface Anchor {
+  id: Id
+  label: string
+  day: string
+  time: number // minutes from midnight, in `tz` (or the trip timezone)
+  hard: boolean
+  /** For things like a departure from home: the anchor's own timezone. */
+  tz?: string
+}
+
+export interface Duration {
+  min: number
+  typical: number
+  max: number
+}
+
+export type HoursSource = 'osm' | 'manual' | 'unverified'
+
+export interface Item {
+  id: Id
+  title: string
+  type: ItemType
+  location?: LatLng
+  address?: string
+  /** Nebulous areas: a center + radius in meters (e.g. "wander Kallio"). */
+  areaRadius?: number
+  /** OSM opening_hours syntax, e.g. "Mo-Fr 10:00-18:00; Sa 11:00-16:00". */
+  hours?: string
+  hoursSource?: HoursSource
+  anchors: Anchor[]
+  duration: Duration
+  /** Soft preference: this is best done while it's light out. */
+  prefersDaylight?: boolean
+  interest: Record<Id, Interest>
+  tags: string[]
+  notes?: string
+  url?: string
+  /** Shown as "needs details" until someone fills in what's missing. */
+  tbd?: string
+  createdAt: number
+}
+
+export type TransitMode = 'walk' | 'transit' | 'drive'
+
+export interface Block {
+  id: Id
+  itemId: Id
+  day: string
+  start: number
+  end: number
+  /** Locked blocks are hard: running-late reflow never moves them. */
+  locked: boolean
+  /** How the group gets *to* this block from the previous one. */
+  modeIn?: TransitMode
+  /** If set, only these people are in this block (group splits, later). */
+  who?: Id[]
+}
+
+export interface Trip {
+  id: Id
+  name: string
+  startDay: string
+  endDay: string
+  timezone: string
+  /** Map default center (and search bias). */
+  center: LatLng
+  people: Person[]
+  items: Item[]
+  blocks: Block[]
+  defaultMode: TransitMode
+}
