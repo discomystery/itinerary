@@ -41,6 +41,15 @@ Kappeli`)
     expect(parseMapsUrl('https://example.com/maps/place/x')).toBeNull()
   })
 
+  it('reads Apple Maps share links', () => {
+    expect(parseMapsUrl('https://maps.apple.com/?ll=60.1525,24.9278&q=L%C3%B6yly&spn=0.008,0.016')).toEqual({ name: 'Löyly', location: { lat: 60.1525, lng: 24.9278 } })
+    expect(parseMapsUrl('https://maps.apple.com/place?address=Hernesaarenranta+4,+00150+Helsinki&coordinate=60.1525,24.9278&name=L%C3%B6yly&place-id=I1234')).toEqual({ name: 'Löyly', location: { lat: 60.1525, lng: 24.9278 } })
+    expect(parseMapsUrl('https://maps.apple.com/?address=Ateneum,+Helsinki&sll=60.17,24.94')).toEqual({ name: 'Ateneum, Helsinki', location: { lat: 60.17, lng: 24.94 } })
+    expect(parseMapsUrl('https://maps.apple/p/abc123')).toEqual({})
+    const p = parseLine('Oodi https://maps.apple.com/?ll=60.1738,24.938&q=Oodi+Helsinki+Central+Library')!
+    expect(p.location).toEqual({ lat: 60.1738, lng: 24.938 })
+  })
+
   it('keeps a plain link with its text', () => {
     const p = parseLine('Allas Sea Pool https://allasseapool.fi/en/')!
     expect(p).toMatchObject({ title: 'Allas Sea Pool', url: 'https://allasseapool.fi/en/' })

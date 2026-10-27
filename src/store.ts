@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { helsinkiTrip } from './data/helsinki'
+import { defaultMapsApp, type MapsApp } from './lib/transit'
 import type { Block, Id, Interest, Item, Person, Trip } from './types'
 
 // All trip data lives behind this one store, so swapping localStorage for a
@@ -19,12 +20,15 @@ interface State {
   simNow: number | null
   history: Trip[]
   editing: Id | null
+  /** This device's maps app for directions and "open in maps" links. */
+  mapsApp: MapsApp
 
   setTab: (t: Tab) => void
   setDay: (d: string) => void
   setViewer: (p: Id) => void
   setSimNow: (ms: number | null) => void
   edit: (id: Id | null) => void
+  setMapsApp: (a: MapsApp) => void
 
   mutate: (fn: (t: Trip) => Trip) => void
   undo: () => void
@@ -66,12 +70,14 @@ export const useStore = create<State>()(
         simNow: null,
         history: [],
         editing: null,
+        mapsApp: defaultMapsApp(),
 
         setTab: (tab) => set({ tab }),
         setDay: (day) => set({ day }),
         setViewer: (viewer) => set({ viewer }),
         setSimNow: (simNow) => set({ simNow }),
         edit: (editing) => set({ editing }),
+        setMapsApp: (mapsApp) => set({ mapsApp }),
 
         mutate,
         undo: () =>
@@ -171,7 +177,7 @@ export const useStore = create<State>()(
         }
         return state as State
       },
-      partialize: (s) => ({ trip: s.trip, viewer: s.viewer, day: s.day, tab: s.tab, simNow: s.simNow }),
+      partialize: (s) => ({ trip: s.trip, viewer: s.viewer, day: s.day, tab: s.tab, simNow: s.simNow, mapsApp: s.mapsApp }),
     },
   ),
 )

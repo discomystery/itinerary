@@ -19,6 +19,7 @@ export default function NowView() {
   const trip = useStore((s) => s.trip)
   const setTab = useStore((s) => s.setTab)
   const setDay = useStore((s) => s.setDay)
+  const mapsApp = useStore((s) => s.mapsApp)
   const now = useNow()
   const [openLeg, setOpenLeg] = useState<Leg | null>(null)
   const [late, setLate] = useState<number | null>(null)
@@ -74,7 +75,7 @@ export default function NowView() {
                 arrive={next.start}
                 leg={nextLeg ? `${MODE_STYLE[nextLeg.mode].name} ${nextLeg.minutes} min` : undefined}
                 color={nextLeg ? MODE_STYLE[nextLeg.mode].c : undefined}
-                directions={nextLoc ? directionsUrl(here, nextLoc, nextLeg?.mode ?? trip.defaultMode) : undefined}
+                directions={nextLoc ? directionsUrl(here, nextLoc, nextLeg?.mode ?? trip.defaultMode, mapsApp) : undefined}
                 onLate={setLate}
                 onOpen={() => open(next)}
               />

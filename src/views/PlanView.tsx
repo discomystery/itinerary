@@ -132,6 +132,7 @@ function ListView({ trip, day, analysis, unfolded, onToggle, onEdit, onMore, onL
   onAdd: () => void
 }) {
   const editItem = useStore((s) => s.edit)
+  const mapsApp = useStore((s) => s.mapsApp)
   const blocks = analysis.blocks
   const legByTo = new Map(analysis.legs.map((l) => [l.toId, l]))
   const dl = daylight(day, trip.center.lat, trip.center.lng, trip.timezone)
@@ -153,7 +154,7 @@ function ListView({ trip, day, analysis, unfolded, onToggle, onEdit, onMore, onL
     const leg = legByTo.get(b.id)
     const from = leg && trip.blocks.find((x) => x.id === leg.fromId)
     const to = ctx.loc(b)
-    const dir = to ? directionsUrl(from ? ctx.loc(from) : undefined, to, leg?.mode ?? trip.defaultMode) : undefined
+    const dir = to ? directionsUrl(from ? ctx.loc(from) : undefined, to, leg?.mode ?? trip.defaultMode, mapsApp) : undefined
     const open = unfolded === b.id
     rows.push({
       key: b.id,

@@ -5,7 +5,7 @@ import { Avatar, Field, Sheet, ViewHeader } from '../components/ui'
 import { helsinkiTrip } from '../data/helsinki'
 import { downloadTrip, parseTrip, shareLink } from '../lib/share'
 import { dayLabel, dayRange, wallToUtc } from '../lib/time'
-import { MODES } from '../lib/transit'
+import { MAPS_APP_NAME, type MapsApp, MODES } from '../lib/transit'
 import { useNow } from '../lib/useNow'
 import { uid, useStore } from '../store'
 import type { DocKind, TravelDoc, Trip } from '../types'
@@ -28,7 +28,8 @@ export default function TripView() {
   const trip = useStore((s) => s.trip)
   const viewer = useStore((s) => s.viewer)
   const simNow = useStore((s) => s.simNow)
-  const { mutate, addPerson, updatePerson, removePerson, replaceTrip, setViewer, setSimNow } = useStore()
+  const mapsApp = useStore((s) => s.mapsApp)
+  const { mutate, addPerson, updatePerson, removePerson, replaceTrip, setViewer, setSimNow, setMapsApp } = useStore()
   const now = useNow()
   const [newPerson, setNewPerson] = useState('')
   const [msg, setMsg] = useState<string | null>(null)
@@ -73,6 +74,14 @@ export default function TripView() {
                 const M = MODE_STYLE[m]
                 return <button key={m} aria-pressed={trip.defaultMode === m} onClick={() => set({ defaultMode: m })}><M.Icon />{M.name}</button>
               })}
+            </div>
+          </div>
+          <div>
+            <div className="sl" style={{ margin: '0 0 6px' }}><span>Open directions in</span><span>This device</span></div>
+            <div className="modes" style={{ gridTemplateColumns: 'repeat(2, 1fr)' }}>
+              {(['apple', 'google'] as MapsApp[]).map((a) => (
+                <button key={a} aria-pressed={mapsApp === a} onClick={() => setMapsApp(a)}>{MAPS_APP_NAME[a]}</button>
+              ))}
             </div>
           </div>
         </div>
