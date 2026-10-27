@@ -90,7 +90,37 @@ the schedule zero, one, or many times.
 - Next options: Google Takeout saved lists, browse nearby by category, and
   AI extraction from any text once there's a backend.
 
-## Real routing (v1.3)
+## Papermap baseline (v1.3)
+
+The app is **Papermap**: old-school travel paper is the design language.
+
+- **Header band**: the folded-map wordmark and who you're voting as, then each
+  tab's title, subtitle and controls on the same white band. Under it, the
+  matte desk with small-caps section labels and one white panel style.
+- **Cards unfold.** Tap a plan to open its second row: the details it would
+  print (seat, gate, door code, meeting point…) beside a stub (QR, postmark,
+  key, CUSTOMER COPY). Directions · Edit · More are printed along the bottom.
+  Times print with a small a/p so long ones fit the 64px column.
+- **Card kinds** (`src/lib/cards.ts`): ticket (event, timed entry), boarding
+  pass (flight, train, ferry, coach), transit fare (single, day pass), transfer
+  chit, reservation, hotel key card, rental key tag (rental, hostel), rental
+  agreement (car), tour voucher, city pass, postcard, folded map, sticky note.
+  Each kind has its own fields (`details`), and stays, cars and passes span
+  from their first time to their last.
+- **Spanning items** show as full cards only on days they have a block; on the
+  days between they're slim ribbons at the top of the day ("Night 3 of 5").
+- **Postcards** stamp VISITED (tap the dashed box) at a different angle from
+  the hours postmark, with faint cancellation lines behind the note.
+- **Now** is a dashboard: the next leg drawn on a scrap of map (the leave flag
+  slides toward the ✕ and turns amber, then red), a ticket stub for the next
+  fixed time (or sunset), a fare card for travel left today, then today's plans
+  and open-nearby. Late? +15 / +30 / +60 opens the fix-it sheet.
+- **Ideas** tiles are one height; the airmail envelope is the Inbox.
+- **Trip**: a trip card, people (You / Vote as), a leather **documents wallet**
+  (passports, entry rules, insurance, loyalty; never on the plan and left out
+  of share links), share and back up, and a Preview-a-time switch.
+
+## Real routing (v1.4)
 
 - Each leg between plans is routed for real, in the background, two requests
   at a time: **walk and taxi** with OSRM on routing.openstreetmap.de, **transit**

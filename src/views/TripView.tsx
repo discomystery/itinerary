@@ -1,25 +1,244 @@
-import { useRef, useState } from 'react'
-import { Avatar, Field, Segmented } from '../components/ui'
+import { BookUser, Download, Link2, Pencil, Plus, Share, ShieldCheck, Stamp, Star, Upload, UserPlus, Wallet, X } from 'lucide-react'
+import { type ReactNode, useRef, useState } from 'react'
+import { MODE_STYLE } from '../components/rail'
+import { Avatar, Field, Sheet, ViewHeader } from '../components/ui'
 import { helsinkiTrip } from '../data/helsinki'
 import { downloadTrip, parseTrip, shareLink } from '../lib/share'
-import { Download, Link2, Upload, X } from 'lucide-react'
-import { MODE_STYLE } from '../components/rail'
-import { MAPS_APP_NAME, MODES, type MapsApp } from '../lib/transit'
-import { useStore } from '../store'
-import type { TransitMode } from '../types'
+import { dayLabel, dayRange, wallToUtc } from '../lib/time'
+import { MAPS_APP_NAME, type MapsApp, MODES } from '../lib/transit'
+import { useNow } from '../lib/useNow'
+import { uid, useStore } from '../store'
+import type { DocKind, TravelDoc, Trip } from '../types'
+
+const DOC_META: Record<DocKind, { label: string; Icon: typeof BookUser; hint: string }> = {
+  passport: { label: 'Passport', Icon: BookUser, hint: 'Name and expiry' },
+  entry: { label: 'Entry rules', Icon: Stamp, hint: 'Visa, authorization, what to show at the border' },
+  insurance: { label: 'Insurance', Icon: ShieldCheck, hint: 'Policy number and emergency phone' },
+  loyalty: { label: 'Loyalty', Icon: Star, hint: 'Airline or rail program and number' },
+  other: { label: 'Other', Icon: Wallet, hint: '' },
+}
+
+const span = (t: Trip) => {
+  const a = dayLabel(t.startDay).split(', ')[1]
+  const b = dayLabel(t.endDay).split(', ')[1]
+  return a.split(' ')[0] === b.split(' ')[0] ? `${a}–${b.split(' ')[1]}` : `${a} – ${b}`
+}
 
 export default function TripView() {
   const trip = useStore((s) => s.trip)
+  const viewer = useStore((s) => s.viewer)
+  const simNow = useStore((s) => s.simNow)
   const mapsApp = useStore((s) => s.mapsApp)
-  const { mutate, addPerson, updatePerson, removePerson, replaceTrip, setMapsApp } = useStore()
+  const { mutate, addPerson, updatePerson, removePerson, replaceTrip, setViewer, setSimNow, setMapsApp } = useStore()
+  const now = useNow()
   const [newPerson, setNewPerson] = useState('')
   const [msg, setMsg] = useState<string | null>(null)
+  const [editing, setEditing] = useState(false)
+  const [doc, setDoc] = useState<TravelDoc | null>(null)
   const file = useRef<HTMLInputElement>(null)
-  const set = (p: Partial<typeof trip>) => mutate((t) => ({ ...t, ...p }))
+  const set = (p: Partial<Trip>) => mutate((t) => ({ ...t, ...p }))
+  const musts = (id: string) => trip.items.filter((i) => i.interest[id] === 'must').length
+
+  const share = async () => {
+    const url = await shareLink(trip)
+    try {
+      if (navigator.share) await navigator.share({ title: trip.name, url })
+      else {
+        await navigator.clipboard.writeText(url)
+        setMsg('Link copied')
+      }
+    } catch {
+      await navigator.clipboard?.writeText(url).catch(() => {})
+      setMsg('Link copied')
+    }
+  }
 
   return (
-    <div className="space-y-4 p-3">
-      <section className="panel space-y-3">
+    <div>
+      <ViewHeader title="Trip" sub="Saved on this device" right={<button className="ib" onClick={share} aria-label="Share link"><Share /></button>} />
+      <div className="desk">
+        <div className="pn tripcard">
+          <button className="nm2" onClick={() => setEditing(true)} aria-label="Edit trip name and dates">
+            <span>{trip.name}</span>
+            <Pencil />
+          </button>
+          <div className="facts">
+            <div><span className="k3">Dates</span><span className="v3">{span(trip)}</span></div>
+            <div><span className="k3">Length</span><span className="v3">{dayRange(trip.startDay, trip.endDay).length} days</span></div>
+            <div><span className="k3">Times in</span><span className="v3">{trip.timezone.split('/')[1]?.replace('_', ' ') ?? trip.timezone}</span></div>
+          </div>
+          <div>
+            <div className="sl" style={{ margin: '0 0 6px' }}><span>Usually get around by</span></div>
+            <div className="modes">
+              {MODES.map((m) => {
+                const M = MODE_STYLE[m]
+                return <button key={m} aria-pressed={trip.defaultMode === m} onClick={() => set({ defaultMode: m })}><M.Icon />{M.name}</button>
+              })}
+            </div>
+          </div>
+          <div>
+            <div className="sl" style={{ margin: '0 0 6px' }}><span>Open directions in</span><span>This device</span></div>
+            <div className="modes" style={{ gridTemplateColumns: 'repeat(2, 1fr)' }}>
+              {(['apple', 'google'] as MapsApp[]).map((a) => (
+                <button key={a} aria-pressed={mapsApp === a} onClick={() => setMapsApp(a)}>{MAPS_APP_NAME[a]}</button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="sl"><span>People</span><span>Votes are cast as you</span></div>
+        <div className="pn np rows">
+          {trip.people.map((p) => (
+            <div key={p.id} className="person">
+              <label className="relative">
+                <Avatar person={p} size={28} />
+                <input type="color" className="absolute inset-0 opacity-0" value={p.color} onChange={(e) => updatePerson(p.id, { color: e.target.value })} aria-label={`${p.name}'s color`} />
+              </label>
+              <span className="x">
+                <input value={p.name} onChange={(e) => updatePerson(p.id, { name: e.target.value })} aria-label="Name" />
+                <small>{musts(p.id)} must-do{musts(p.id) === 1 ? '' : 's'}</small>
+              </span>
+              {p.id === viewer ? <span className="you">You</span> : <button className="sw" onClick={() => setViewer(p.id)}>Vote as</button>}
+              {trip.people.length > 1 && p.id !== viewer && (
+                <button className="btn-ghost -mr-2 px-1.5" onClick={() => confirm(`Remove ${p.name} and their votes?`) && removePerson(p.id)} aria-label={`Remove ${p.name}`}><X size={15} /></button>
+              )}
+            </div>
+          ))}
+          <form
+            className="person add"
+            onSubmit={(e) => {
+              e.preventDefault()
+              if (newPerson.trim()) addPerson(newPerson.trim())
+              setNewPerson('')
+            }}
+          >
+            <UserPlus />
+            <input placeholder="Add someone" value={newPerson} onChange={(e) => setNewPerson(e.target.value)} aria-label="Add someone" />
+            {newPerson && <button className="sw">Add</button>}
+          </form>
+        </div>
+
+        <div className="sl"><span>Travel documents</span><span>Never on the plan</span></div>
+        <DocWallet docs={trip.docs ?? []} onOpen={setDoc} onAdd={(kind) => setDoc({ id: uid('d'), kind, label: DOC_META[kind].label })} />
+
+        <div className="sl"><span>Share &amp; back up</span></div>
+        <div className="acts4">
+          <button className="pri" onClick={share}><Link2 />Share link</button>
+          <button onClick={() => downloadTrip(trip)}><Download />Export</button>
+          <button onClick={() => file.current?.click()}><Upload />Import</button>
+        </div>
+        <input
+          ref={file}
+          type="file"
+          accept="application/json,.json"
+          className="hidden"
+          onChange={async (e) => {
+            const f = e.target.files?.[0]
+            if (!f) return
+            try {
+              replaceTrip(parseTrip(await f.text()))
+              setMsg('Imported')
+            } catch (err) {
+              setMsg(String((err as Error).message))
+            }
+            e.target.value = ''
+          }}
+        />
+        {msg && <p className="text-sm" style={{ color: '#15803d' }}>{msg}</p>}
+        <p className="text-xs t-sub">Whoever opens a link or file gets their own copy. Live sync comes later.</p>
+
+        <button
+          className="pn trow"
+          onClick={() => setSimNow(simNow != null ? null : wallToUtc(trip.timezone, trip.blocks.find((b) => b.locked)?.day ?? trip.startDay, 14 * 60))}
+          aria-pressed={simNow != null}
+        >
+          <span className="x">Preview a time<small>{simNow != null ? `Pretending it's ${dayLabel(now.day)}. Tap to go back to real time` : 'See Now as it’ll look during the trip'}</small></span>
+          <span className={simNow != null ? 'tg on' : 'tg'} />
+        </button>
+
+        <div className="sl"><span>Start over</span></div>
+        <button className="btn-soft self-start" onClick={() => confirm('Reset to the Helsinki sample trip? (Undo works.)') && replaceTrip(helsinkiTrip())}>Reset to Helsinki sample</button>
+      </div>
+
+      {editing && <TripSheet onClose={() => setEditing(false)} />}
+      {doc && (
+        <DocSheet
+          doc={doc}
+          onClose={() => setDoc(null)}
+          onSave={(d) => {
+            const docs = trip.docs ?? []
+            set({ docs: docs.some((x) => x.id === d.id) ? docs.map((x) => (x.id === d.id ? d : x)) : [...docs, d] })
+            setDoc(null)
+          }}
+          onDelete={() => {
+            set({ docs: (trip.docs ?? []).filter((x) => x.id !== doc.id) })
+            setDoc(null)
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
+/** A leather wallet: the passport, insurance and loyalty cards peek out over the list. */
+function DocWallet({ docs, onOpen, onAdd }: { docs: TravelDoc[]; onOpen: (d: TravelDoc) => void; onAdd: (k: DocKind) => void }) {
+  const first = (k: DocKind) => docs.find((d) => d.kind === k)
+  const rows: ReactNode[] = []
+  for (const k of ['passport', 'entry', 'insurance', 'loyalty'] as DocKind[]) {
+    const list = docs.filter((d) => d.kind === k)
+    const M = DOC_META[k]
+    if (!list.length) {
+      rows.push(<button key={k} onClick={() => onAdd(k)}><M.Icon /><b>{M.label}</b><small className="addd">Add</small></button>)
+    }
+    for (const d of list) rows.push(<button key={d.id} onClick={() => onOpen(d)}><M.Icon /><b>{d.label}</b><small>{d.value || 'Add details'}</small></button>)
+  }
+  for (const d of docs.filter((x) => x.kind === 'other')) rows.push(<button key={d.id} onClick={() => onOpen(d)}><Wallet /><b>{d.label}</b><small>{d.value}</small></button>)
+  rows.push(<button key="add" onClick={() => onAdd('other')}><Plus /><b className="addd">Something else</b><small /></button>)
+  return (
+    <div className="wallet">
+      <div className="wt"><span><Wallet />Travel documents</span><small>{docs.length ? `${docs.length} kept here` : 'On this device only'}</small></div>
+      <div className="docs" aria-hidden="true">
+        <div className="pp"><span className="em" /><b>PASSPORT</b></div>
+        <div className="dc ins"><span className="k">Insurance</span><b>{first('insurance')?.value || '—'}</b></div>
+        <div className="dc loy"><span className="k">Loyalty</span><b>{first('loyalty')?.value || '—'}</b></div>
+      </div>
+      <div className="wrows">{rows}</div>
+    </div>
+  )
+}
+
+function DocSheet({ doc, onClose, onSave, onDelete }: { doc: TravelDoc; onClose: () => void; onSave: (d: TravelDoc) => void; onDelete: () => void }) {
+  const [d, setD] = useState(doc)
+  const M = DOC_META[d.kind]
+  return (
+    <Sheet
+      open
+      onClose={onClose}
+      title={M.label}
+      footer={
+        <div className="flex gap-2">
+          <button className="btn-ghost" style={{ color: '#c8102e' }} onClick={onDelete}>Remove</button>
+          <button className="btn ml-auto" onClick={() => onSave(d)}>Save</button>
+        </div>
+      }
+    >
+      <div className="space-y-3">
+        <Field label="Name"><input className="input" value={d.label} onChange={(e) => setD({ ...d, label: e.target.value })} /></Field>
+        <Field label="Details" hint={`${M.hint ? `${M.hint}. ` : ''}Saved on this device. Share links leave these out; an exported backup file keeps them.`}>
+          <textarea className="input min-h-20" value={d.value ?? ''} onChange={(e) => setD({ ...d, value: e.target.value || undefined })} />
+        </Field>
+      </div>
+    </Sheet>
+  )
+}
+
+function TripSheet({ onClose }: { onClose: () => void }) {
+  const trip = useStore((s) => s.trip)
+  const mutate = useStore((s) => s.mutate)
+  const set = (p: Partial<Trip>) => mutate((t) => ({ ...t, ...p }))
+  return (
+    <Sheet open onClose={onClose} title="Trip details" footer={<button className="btn w-full" onClick={onClose}>Done</button>}>
+      <div className="space-y-3">
         <Field label="Trip name">
           <input className="input" value={trip.name} onChange={(e) => set({ name: e.target.value })} />
         </Field>
@@ -34,104 +253,7 @@ export default function TripView() {
         <Field label="Trip timezone" hint="All schedule times are local to the trip.">
           <input className="input" value={trip.timezone} onChange={(e) => set({ timezone: e.target.value })} />
         </Field>
-        <Field label="Usually get around by">
-          <Segmented<TransitMode>
-            value={trip.defaultMode}
-            onChange={(defaultMode) => set({ defaultMode })}
-            options={MODES.map((m) => { const M = MODE_STYLE[m]; return { value: m, label: <><M.Icon size={14} /> {M.name}</> } })}
-          />
-        </Field>
-        <Field label="Open directions in" hint="Just for this device.">
-          <Segmented<MapsApp>
-            value={mapsApp}
-            onChange={setMapsApp}
-            options={(['apple', 'google'] as const).map((a) => ({ value: a, label: MAPS_APP_NAME[a] }))}
-          />
-        </Field>
-      </section>
-
-      <section className="panel">
-        <h2 className="mb-2 text-sm font-semibold">People</h2>
-        <ul className="space-y-2">
-          {trip.people.map((p) => (
-            <li key={p.id} className="flex items-center gap-2">
-              <label className="relative">
-                <Avatar person={p} size={32} />
-                <input type="color" className="absolute inset-0 opacity-0" value={p.color} onChange={(e) => updatePerson(p.id, { color: e.target.value })} />
-              </label>
-              <input className="input" value={p.name} onChange={(e) => updatePerson(p.id, { name: e.target.value })} />
-              {trip.people.length > 1 && (
-                <button className="btn-ghost px-2" onClick={() => confirm(`Remove ${p.name} and their votes?`) && removePerson(p.id)}><X size={16} /></button>
-              )}
-            </li>
-          ))}
-        </ul>
-        <form
-          className="mt-2 flex gap-2"
-          onSubmit={(e) => {
-            e.preventDefault()
-            if (newPerson.trim()) addPerson(newPerson.trim())
-            setNewPerson('')
-          }}
-        >
-          <input className="input" placeholder="Add someone…" value={newPerson} onChange={(e) => setNewPerson(e.target.value)} />
-          <button className="btn shrink-0">Add</button>
-        </form>
-      </section>
-
-      <section className="panel space-y-2">
-        <h2 className="text-sm font-semibold">Share &amp; back up</h2>
-        <p className="text-xs t-sub">
-          This version stores the trip on this device only. To share it, send a link or file. Whoever opens it gets their own copy; live sync comes later.
-        </p>
-        <div className="flex flex-wrap gap-2">
-          <button
-            className="btn"
-            onClick={async () => {
-              const url = await shareLink(trip)
-              try {
-                if (navigator.share) await navigator.share({ title: trip.name, url })
-                else {
-                  await navigator.clipboard.writeText(url)
-                  setMsg('Link copied')
-                }
-              } catch {
-                await navigator.clipboard?.writeText(url).catch(() => {})
-                setMsg('Link copied')
-              }
-            }}
-          >
-            <Link2 size={16} /> Share link
-          </button>
-          <button className="btn-soft" onClick={() => downloadTrip(trip)}><Download size={16} /> Export file</button>
-          <button className="btn-soft" onClick={() => file.current?.click()}><Upload size={16} /> Import file</button>
-          <input
-            ref={file}
-            type="file"
-            accept="application/json,.json"
-            className="hidden"
-            onChange={async (e) => {
-              const f = e.target.files?.[0]
-              if (!f) return
-              try {
-                replaceTrip(parseTrip(await f.text()))
-                setMsg('Imported')
-              } catch (err) {
-                setMsg(String((err as Error).message))
-              }
-              e.target.value = ''
-            }}
-          />
-        </div>
-        {msg && <p className="text-sm" style={{ color: '#15803d' }}>{msg}</p>}
-      </section>
-
-      <section className="panel space-y-2">
-        <h2 className="text-sm font-semibold">Start over</h2>
-        <button className="btn-soft" onClick={() => confirm('Reset to the Helsinki sample trip? (Undo works.)') && replaceTrip(helsinkiTrip())}>
-          Reset to Helsinki sample
-        </button>
-      </section>
-    </div>
+      </div>
+    </Sheet>
   )
 }

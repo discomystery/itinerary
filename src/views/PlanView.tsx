@@ -1,12 +1,14 @@
-import { CalendarDays, ChevronRight, Clock, GripVertical, List, Lock, MapPin, Plus, StickyNote, TriangleAlert } from 'lucide-react'
+import { ArrowRight, CalendarDays, ChevronRight, Clock, Ellipsis, GripVertical, List, Lock, LockOpen, MapPin, Navigation, Pencil, Plus, StickyNote, Trash2, TriangleAlert, Undo2 } from 'lucide-react'
 import { Fragment, type ReactNode, useMemo, useRef, useState } from 'react'
 import { clock, glyphFor, objectKind, ObjectCard } from '../components/objects'
 import { Horizon, LegPill, LegSheet, leaveAt, MODE_STYLE, RailGap, RailMark, railVars } from '../components/rail'
-import { cx, IssueList, Segmented, Sheet, Votes } from '../components/ui'
+import { Ribbons } from '../components/ribbons'
+import { cx, IssueList, Sheet, ViewHeader, Votes } from '../components/ui'
 import { daylight, hoursSummary, openSpans, openStatus } from '../lib/hours'
 import { useFetchRoutes, useRoutes } from '../lib/routeCache'
 import { type DayAnalysis, type Leg, analyzeDay, anchorOnDay, anchoredSlot, findSlot, interestScore, makeCtx, worstSeverity } from '../lib/schedule'
 import { dayLabel, dayRange, fmtDuration, parseHHMM, snap, toHHMM } from '../lib/time'
+import { directionsUrl } from '../lib/transit'
 import { useNow } from '../lib/useNow'
 import { ideas, itemById, useStore } from '../store'
 import type { Block, Item, TransitMode, Trip } from '../types'
@@ -39,6 +41,8 @@ export default function PlanView() {
   })
   const [addAt, setAddAt] = useState<number | null>(null)
   const [openBlock, setOpenBlock] = useState<string | null>(null)
+  const [unfolded, setUnfolded] = useState<string | null>(null)
+  const [more, setMore] = useState<string | null>(null)
   const [openLeg, setOpenLeg] = useState<Leg | null>(null)
   const pick = (m: Mode) => {
     setMode(m)
@@ -50,40 +54,45 @@ export default function PlanView() {
   }
 
   return (
-    <div className="pb-8">
-      <div className="chrome sticky top-0 z-20 border-b b-line">
-        <DayStrip days={days} day={day} setDay={setDay} analyses={analyses} />
-        <div className="flex items-end justify-between gap-2 px-4 pt-1">
-          <div>
-            <div className="text-[28px] font-bold leading-tight tracking-tight">{dayLabel(day).replace(',', '')}</div>
-          </div>
-          <div className="mb-1 flex items-center gap-2">
-            <Segmented<Mode>
-              value={mode}
-              onChange={pick}
-              options={[
-                { value: 'list', label: <><List size={14} /> List</> },
-                { value: 'day', label: <><CalendarDays size={14} /> Day</> },
-              ]}
-            />
-            <button className="btn h-8 w-8 p-0" onClick={() => setAddAt(-1)} aria-label="Add to this day">
-              <Plus size={18} />
-            </button>
-          </div>
-        </div>
-        <div className="px-4 pb-3 pt-2">
-          <Horizon trip={trip} day={day} now={now.day === day ? now.min : undefined} />
-        </div>
-      </div>
+    <div>
+      <ViewHeader
+        top={<DayStrip days={days} day={day} setDay={setDay} analyses={analyses} />}
+        title={dayLabel(day).replace(',', '')}
+        right={
+          <>
+            <span className="seg3">
+              <button aria-pressed={mode === 'list'} onClick={() => pick('list')} title="List" aria-label="List"><List /></button>
+              <button aria-pressed={mode === 'day'} onClick={() => pick('day')} title="Day" aria-label="Day"><CalendarDays /></button>
+            </span>
+            <button className="fab" onClick={() => setAddAt(-1)} aria-label="Add to this day"><Plus /></button>
+          </>
+        }
+      >
+        <Horizon trip={trip} day={day} now={now.day === day ? now.min : undefined} />
+      </ViewHeader>
 
-      {mode === 'list' ? (
-        <ListView trip={trip} day={day} analysis={analysis} onOpen={setOpenBlock} onLeg={setOpenLeg} onAdd={() => setAddAt(-1)} />
-      ) : (
-        <DayView trip={trip} day={day} analysis={analysis} onEmpty={setAddAt} onOpen={setOpenBlock} onLeg={setOpenLeg} />
-      )}
+      <div className="desk">
+        <Ribbons day={day} />
+        {mode === 'list' ? (
+          <ListView
+            trip={trip}
+            day={day}
+            analysis={analysis}
+            unfolded={unfolded}
+            onToggle={(id) => setUnfolded(unfolded === id ? null : id)}
+            onEdit={setOpenBlock}
+            onMore={setMore}
+            onLeg={setOpenLeg}
+            onAdd={() => setAddAt(-1)}
+          />
+        ) : (
+          <DayView trip={trip} day={day} analysis={analysis} onEmpty={setAddAt} onOpen={setOpenBlock} onLeg={setOpenLeg} />
+        )}
+      </div>
 
       {addAt !== null && <AddSheet trip={trip} day={day} at={addAt < 0 ? null : addAt} onClose={() => setAddAt(null)} />}
       {openBlock && <BlockSheet id={openBlock} analysis={analysis} onClose={() => setOpenBlock(null)} onLeg={(l) => { setOpenBlock(null); setOpenLeg(l) }} />}
+      {more && <MoreSheet id={more} onClose={() => setMore(null)} onWhen={() => { setOpenBlock(more); setMore(null) }} />}
       {openLeg && <LegSheet leg={openLeg} onClose={() => setOpenLeg(null)} />}
     </div>
   )
@@ -96,23 +105,17 @@ function DayStrip({ days, day, setDay, analyses }: {
   analyses: Record<string, DayAnalysis>
 }) {
   return (
-    <div className="flex gap-1 overflow-x-auto px-3 pb-1 pt-2">
+    <div className="days">
       {days.map((d) => {
         const a = analyses[d]
         const sev = worstSeverity([...a.issues.values()].flat().filter((i) => i.severity !== 'info'))
         const hard = a.blocks.some((b) => b.locked)
-        const on = d === day
         return (
-          <button key={d} onClick={() => setDay(d)} className="relative flex min-w-11 shrink-0 flex-col items-center gap-1 rounded-lg px-1.5 py-1" aria-pressed={on}>
-            <span className="text-[10px] font-medium uppercase t-sub">{dayLabel(d).slice(0, 1)}</span>
-            <span
-              className="grid h-8 w-8 place-items-center rounded-full text-[15px] font-semibold"
-              style={on ? { background: 'var(--ink)', color: 'var(--chrome)' } : undefined}
-            >
-              {Number(d.slice(8))}
-            </span>
-            <span className="h-1 w-1 rounded-full" style={{ background: a.blocks.length ? (hard ? 'var(--hard)' : 'var(--sub)') : 'transparent' }} />
-            {sev && <span className="absolute right-0.5 top-4 h-2 w-2 rounded-full" style={{ background: sev === 'error' ? '#e11d48' : '#f59e0b' }} />}
+          <button key={d} onClick={() => setDay(d)} aria-pressed={d === day} className={cx(hard && 'hardday', !a.blocks.length && 'none')} aria-label={dayLabel(d, 'long')}>
+            {dayLabel(d).slice(0, 1)}
+            <b>{Number(d.slice(8))}</b>
+            <i />
+            {sev && <span className="sev" style={{ background: sev === 'error' ? '#e11d48' : '#f59e0b' }} />}
           </button>
         )
       })}
@@ -124,21 +127,27 @@ function DayStrip({ days, day, setDay, analyses }: {
 
 type Row = { key: string; t: number; node: ReactNode; mode?: TransitMode; isLeg?: boolean }
 
-function ListView({ trip, day, analysis, onOpen, onLeg, onAdd }: {
+function ListView({ trip, day, analysis, unfolded, onToggle, onEdit, onMore, onLeg, onAdd }: {
   trip: Trip
   day: string
   analysis: DayAnalysis
-  onOpen: (id: string) => void
+  unfolded: string | null
+  onToggle: (id: string) => void
+  onEdit: (id: string) => void
+  onMore: (id: string) => void
   onLeg: (l: Leg) => void
   onAdd: () => void
 }) {
+  const editItem = useStore((s) => s.edit)
+  const mapsApp = useStore((s) => s.mapsApp)
   const blocks = analysis.blocks
   const legByTo = new Map(analysis.legs.map((l) => [l.toId, l]))
   const dl = daylight(day, trip.center.lat, trip.center.lng, trip.timezone)
+  const ctx = makeCtx(trip)
 
   if (!blocks.length) {
     return (
-      <div className="px-4 pt-10 text-center">
+      <div className="px-4 pt-8 text-center">
         <p className="text-sm t-sub">Nothing planned for {dayLabel(day, 'long')} yet.</p>
         <button className="btn mt-4" onClick={onAdd}><Plus size={16} /> Add a plan</button>
       </div>
@@ -149,16 +158,40 @@ function ListView({ trip, day, analysis, onOpen, onLeg, onAdd }: {
   blocks.forEach((b, i) => {
     const item = itemById(trip, b.itemId)
     if (!item) return
+    const leg = legByTo.get(b.id)
+    const from = leg && trip.blocks.find((x) => x.id === leg.fromId)
+    const to = ctx.loc(b)
+    const dir = to ? directionsUrl(from ? ctx.loc(from) : undefined, to, leg?.mode ?? trip.defaultMode, mapsApp) : undefined
+    const open = unfolded === b.id
     rows.push({
       key: b.id,
       t: b.start,
-      node: <ObjectCard item={item} block={b} tz={trip.timezone} issues={analysis.issues.get(b.id)} onClick={() => onOpen(b.id)} />,
+      node: (
+        <ObjectCard
+          item={item}
+          block={b}
+          tz={trip.timezone}
+          issues={analysis.issues.get(b.id)}
+          open={open}
+          onClick={() => onToggle(b.id)}
+          onEdit={() => editItem(item.id)}
+          strip={
+            open && (
+              <>
+                {dir ? <a href={dir} target="_blank" rel="noreferrer"><Navigation />Directions</a> : <span />}
+                <button type="button" onClick={() => onEdit(b.id)}><Pencil />Edit</button>
+                <button type="button" onClick={() => onMore(b.id)}><Ellipsis />More</button>
+              </>
+            )
+          }
+        />
+      ),
     })
     const next = blocks[i + 1]
     if (!next) return
-    const leg = legByTo.get(next.id)
-    if (leg && leg.minutes > 0) {
-      rows.push({ key: `leg-${next.id}`, t: leaveAt(trip, leg), mode: leg.mode, isLeg: true, node: <LegPill trip={trip} leg={leg} onOpen={() => onLeg(leg)} /> })
+    const nleg = legByTo.get(next.id)
+    if (nleg && nleg.minutes > 0) {
+      rows.push({ key: `leg-${next.id}`, t: leaveAt(trip, nleg), mode: nleg.mode, isLeg: true, node: <LegPill trip={trip} leg={nleg} onOpen={() => onLeg(nleg)} /> })
     } else {
       rows.push({ key: `gap-${next.id}`, t: next.start, node: <RailGap /> })
     }
@@ -174,7 +207,7 @@ function ListView({ trip, day, analysis, onOpen, onLeg, onAdd }: {
   }
 
   return (
-    <div className="flex flex-col gap-2 px-3 pt-3">
+    <div className="flex flex-col gap-2">
       {rows.map((r) => <Fragment key={r.key}>{r.node}</Fragment>)}
     </div>
   )
@@ -274,7 +307,7 @@ function DayView({ trip, day, analysis, onEmpty, onOpen, onLeg }: {
   }
 
   return (
-    <div className="px-3 pt-3">
+    <div>
       <div
         ref={ref}
         className="cal chrome overflow-hidden rounded-[10px] border b-line"
@@ -460,7 +493,9 @@ function BlockSheet({ id, analysis, onClose, onLeg }: { id: string; analysis: Da
   const days = dayRange(trip.startDay, trip.endDay)
   const shift = (m: number) => updateBlock(b.id, { start: b.start + m, end: b.end + m })
   const leg = analysis.legs.find((l) => l.toId === b.id)
+  const from = leg && itemById(trip, trip.blocks.find((x) => x.id === leg.fromId)?.itemId ?? '')
   const hours = hoursSummary(item.hours, b.day, clock)
+  const M = leg ? MODE_STYLE[leg.mode] : null
 
   return (
     <Sheet
@@ -469,71 +504,93 @@ function BlockSheet({ id, analysis, onClose, onLeg }: { id: string; analysis: Da
       title={item.title}
       footer={
         <div className="flex gap-2">
-          <button className="btn-soft flex-1" onClick={() => { removeBlock(b.id); onClose() }}>Unschedule</button>
-          <button className="btn flex-1" onClick={() => { onClose(); edit(item.id) }}>Edit details</button>
+          <button className="btn-soft flex-1" onClick={() => { removeBlock(b.id); onClose() }}><Undo2 size={15} /> Unschedule</button>
+          <button className="btn flex-1" onClick={() => { onClose(); edit(item.id) }}><Pencil size={15} /> Edit card</button>
         </div>
       }
     >
-      <div className="flex flex-col gap-4">
-        <ObjectCard item={item} size="l" block={b} tz={trip.timezone} people={trip.people}>
-          <div className="mt-auto pt-2"><Votes item={item} people={trip.people} /></div>
-        </ObjectCard>
+      <div className="sheetdesk">
+        <ObjectCard item={item} block={b} tz={trip.timezone} open onEdit={() => { onClose(); edit(item.id) }} />
         <IssueList issues={analysis.issues.get(b.id)} />
-        <div className="grid grid-cols-2 gap-2">
-          <label className="label">
-            Start
-            <input type="time" className="input mt-1 font-sans normal-case tracking-normal" value={toHHMM(b.start)} onChange={(e) => {
-              const s = parseHHMM(e.target.value)
-              if (s != null) updateBlock(b.id, { start: s, end: s + (b.end - b.start) })
-            }} />
-          </label>
-          <label className="label">
-            End
-            <input type="time" className="input mt-1 font-sans normal-case tracking-normal" value={toHHMM(b.end)} onChange={(e) => {
-              let s = parseHHMM(e.target.value)
-              if (s == null) return
-              if (s <= b.start) s += 1440
-              updateBlock(b.id, { end: s })
-            }} />
-          </label>
-        </div>
-        <div className="flex flex-wrap items-center gap-1.5">
-          {[-30, -15, 15, 30, 60].map((m) => (
-            <button key={m} className="btn-soft px-3 py-1 font-mono text-xs" onClick={() => shift(m)}>{m > 0 ? '+' : '−'}{Math.abs(m)}</button>
-          ))}
-          <span className="ml-auto text-xs t-sub">{fmtDuration(b.end - b.start)} · usually {fmtDuration(item.duration.typical)}</span>
-        </div>
-        <label className="panel flex items-center gap-3 text-sm">
-          <Lock size={16} className="flex-none t-sub" />
-          <span className="flex-1"><b>Fixed time</b><br /><span className="t-sub">Running late never moves it. Use for tickets and bookings.</span></span>
-          <input type="checkbox" className="h-5 w-5" checked={b.locked} onChange={(e) => updateBlock(b.id, { locked: e.target.checked })} />
-        </label>
-        <div>
-          <div className="label mb-1.5">Move to</div>
-          <div className="flex flex-wrap gap-1">
-            {days.map((d) => (
-              <button key={d} onClick={() => updateBlock(b.id, { day: d })} className="rounded-lg px-2.5 py-1 text-xs font-medium"
-                style={d === b.day ? { background: 'var(--ink)', color: 'var(--chrome)' } : { boxShadow: 'inset 0 0 0 1px var(--line)' }}>
-                {dayLabel(d).split(',')[0]} {Number(d.slice(8))}
-              </button>
-            ))}
+        <div className="pn">
+          <div className="sl" style={{ margin: '0 0 8px' }}><span>When</span><span>{fmtDuration(b.end - b.start)} · usually {fmtDuration(item.duration.typical)}</span></div>
+          <div className="when">
+            <label>
+              <small>Day</small>
+              <b>{dayLabel(b.day).split(',')[0]} {Number(b.day.slice(8))}</b>
+              <select value={b.day} onChange={(e) => updateBlock(b.id, { day: e.target.value })} aria-label="Day">
+                {days.map((d) => <option key={d} value={d}>{dayLabel(d)}</option>)}
+              </select>
+            </label>
+            <label>
+              <small>Start</small>
+              <b>{clock(b.start)}</b>
+              <input type="time" value={toHHMM(b.start)} aria-label="Start" onChange={(e) => {
+                const s = parseHHMM(e.target.value)
+                if (s != null) updateBlock(b.id, { start: s, end: s + (b.end - b.start) })
+              }} />
+            </label>
+            <span className="ar"><ArrowRight /></span>
+            <label>
+              <small>End</small>
+              <b>{clock(b.end)}</b>
+              <input type="time" value={toHHMM(b.end)} aria-label="End" onChange={(e) => {
+                let s = parseHHMM(e.target.value)
+                if (s == null) return
+                if (s <= b.start) s += 1440
+                updateBlock(b.id, { end: s })
+              }} />
+            </label>
+          </div>
+          <div className="nudge">
+            <span className="stp2"><button onClick={() => shift(-15)}>−15</button><button onClick={() => shift(15)}>+15</button></span>
+            <span className="stp2"><button onClick={() => shift(-60)}>−1h</button><button onClick={() => shift(60)}>+1h</button></span>
+            <button
+              className="lockb"
+              aria-pressed={b.locked}
+              onClick={() => updateBlock(b.id, { locked: !b.locked })}
+              title={b.locked ? 'Fixed time: running late never moves it. Tap to unlock' : 'Can move when you run late. Tap to fix this time'}
+              aria-label={b.locked ? 'Fixed time. Unlock' : 'Lock this time'}
+            >
+              {b.locked ? <Lock /> : <LockOpen />}
+            </button>
           </div>
         </div>
-        {leg && (
-          <div>
-            <div className="label mb-1.5">Getting here</div>
-            <button className={cx('pill', leg.tight && 'tight')} style={railVars(leg.mode)} onClick={() => onLeg(leg)}>
-              {(() => { const M = MODE_STYLE[leg.mode].Icon; return <span className="mi"><M /></span> })()}
-              {leg.line ?? MODE_STYLE[leg.mode].name} · {leg.minutes} min <small>· leave {clock(leaveAt(trip, leg))}</small>
-              <ChevronRight />
+        {leg && M && (
+          <div className="pn">
+            <div className="sl" style={{ margin: '0 0 8px' }}><span>Getting here</span><span className="truncate pl-2">from {from?.title}</span></div>
+            <button className={cx('gh3', leg.tight && 'tight')} style={railVars(leg.mode)} onClick={() => onLeg(leg)}>
+              <span className="mi"><M.Icon /></span>
+              <span className="x"><b>{leg.line ?? M.name} · {leg.minutes} min</b><small>{leg.tight ? `${b.start - leg.gap - leaveAt(trip, leg)} min short · ` : ''}Leave {clock(leaveAt(trip, leg))}</small></span>
+              <span className="ch">Change<ChevronRight /></span>
             </button>
           </div>
         )}
-        <div className="flex flex-col gap-1.5 text-sm t-sub">
-          {hours && <div className="flex items-center gap-2"><Clock size={14} /> {hours}{item.hoursSource === 'unverified' && ' (unverified)'}</div>}
-          {item.address && <div className="flex items-center gap-2"><MapPin size={14} /> {item.address}</div>}
-          {item.notes && <div className="flex gap-2"><StickyNote size={14} className="mt-0.5 flex-none" /> <span className="whitespace-pre-wrap">{item.notes}</span></div>}
-        </div>
+        {(hours || item.address || (item.notes && objectKind(item) !== 'post')) && (
+          <div className="facts2">
+            {hours && <div><Clock /> {hours}{item.hoursSource === 'unverified' && ' (unverified)'}</div>}
+            {item.address && <div><MapPin /> {item.address}</div>}
+            {item.notes && objectKind(item) !== 'post' && <div><StickyNote /> <span className="whitespace-pre-wrap">{item.notes}</span></div>}
+          </div>
+        )}
+      </div>
+    </Sheet>
+  )
+}
+
+function MoreSheet({ id, onClose, onWhen }: { id: string; onClose: () => void; onWhen: () => void }) {
+  const trip = useStore((s) => s.trip)
+  const { removeBlock, deleteItem, edit } = useStore()
+  const b = trip.blocks.find((x) => x.id === id)
+  const item = b && itemById(trip, b.itemId)
+  if (!b || !item) return null
+  return (
+    <Sheet open onClose={onClose} title={item.title}>
+      <div className="menu">
+        <button onClick={onWhen}><CalendarDays />Change the day or time</button>
+        <button onClick={() => { onClose(); edit(item.id) }}><Pencil />Edit the card</button>
+        <button onClick={() => { removeBlock(b.id); onClose() }}><Undo2 />Unschedule (keep the idea)</button>
+        <button className="danger" onClick={() => { if (confirm(`Delete “${item.title}” from the trip?`)) { deleteItem(item.id); onClose() } }}><Trash2 />Delete the idea</button>
       </div>
     </Sheet>
   )

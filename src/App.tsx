@@ -1,6 +1,6 @@
 import { CalendarDays, Lightbulb, type LucideIcon, Map as MapIcon, Timer, Undo2, Users } from 'lucide-react'
-import { useEffect, useState } from 'react'
-import { Avatar, cx } from './components/ui'
+import { useEffect, useRef, useState } from 'react'
+import { Avatar, cx, Mark } from './components/ui'
 import ItemEditor from './components/ItemEditor'
 import { type Tab, useStore } from './store'
 import { importFromHash } from './lib/share'
@@ -22,7 +22,12 @@ const TABS: { id: Tab; Icon: LucideIcon; label: string }[] = [
 export default function App() {
   const { tab, setTab, trip, viewer, setViewer, history: past, undo, editing, edit } = useStore()
   const [shareMsg, setShareMsg] = useState<string | null>(null)
+  const main = useRef<HTMLElement>(null)
   useInboxLookups()
+  // Each tab opens at its top.
+  useEffect(() => {
+    main.current?.scrollTo(0, 0)
+  }, [tab])
 
   useEffect(() => {
     importFromHash().then((t) => {
@@ -40,15 +45,17 @@ export default function App() {
 
   return (
     <div className="mx-auto flex h-full max-w-3xl flex-col">
-      <header className="chrome flex items-center gap-2 px-3 pb-1 pt-[max(0.5rem,env(safe-area-inset-top))]">
-        <div className="min-w-0 flex-1 truncate font-mono text-[11px] font-semibold uppercase tracking-[.06em] t-sub">{trip.name}</div>
-        <button className="btn-ghost h-8 px-2" disabled={!past.length} onClick={undo} title="Undo" aria-label="Undo">
-          <Undo2 size={17} />
-        </button>
+      <header className="chrome flex items-center gap-2 px-3.5 pb-1.5 pt-[max(0.6rem,env(safe-area-inset-top))]">
+        <div className="min-w-0 flex-1" title={trip.name}><Mark /></div>
+        {past.length > 0 && (
+          <button className="btn-ghost h-8 px-2" onClick={undo} title="Undo" aria-label="Undo">
+            <Undo2 size={17} />
+          </button>
+        )}
         {me && (
-          <label className="flex items-center gap-1.5 rounded-full py-1 pl-1 pr-2 text-xs" style={{ boxShadow: 'inset 0 0 0 1px var(--line)' }} title="Votes are cast as this person">
+          <label className="flex items-center gap-1.5 rounded-full py-0.5 pl-0.5 pr-1.5 text-xs" title="Votes are cast as this person">
             <Avatar person={me} size={22} />
-            <select className="bg-transparent font-medium outline-none" value={me.id} onChange={(e) => setViewer(e.target.value)} aria-label="Voting as">
+            <select className="bg-transparent font-semibold outline-none" value={me.id} onChange={(e) => setViewer(e.target.value)} aria-label="Voting as">
               {trip.people.map((p) => (
                 <option key={p.id} value={p.id}>{p.name}</option>
               ))}
@@ -61,7 +68,7 @@ export default function App() {
         <button className="chrome px-3 py-2 text-left text-sm" style={{ color: '#15803d' }} onClick={() => setShareMsg(null)}>{shareMsg}</button>
       )}
 
-      <main className={cx('min-h-0 flex-1', tab === 'map' ? 'overflow-hidden' : 'overflow-y-auto')}>
+      <main ref={main} className={cx('min-h-0 flex-1', tab === 'map' ? 'overflow-hidden' : 'overflow-y-auto')}>
         {tab === 'now' && <NowView />}
         {tab === 'plan' && <PlanView />}
         {tab === 'map' && <MapView />}

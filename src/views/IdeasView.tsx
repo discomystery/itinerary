@@ -1,22 +1,22 @@
-import { CalendarPlus, ClipboardList, Heart, Plus, Search } from 'lucide-react'
+import { CalendarDays, CalendarPlus, ClipboardList, Heart, Plus, Search } from 'lucide-react'
 import { InboxBanner, InboxReview, PasteSheet } from '../components/inbox'
 import { useState } from 'react'
-import { clock, ObjectCard } from '../components/objects'
-import { INTEREST_META, INTERESTS, Sheet } from '../components/ui'
+import { clock, defaultEyebrow, glyphFor, objectKind } from '../components/objects'
+import { cx, INTEREST_META, INTERESTS, Sheet, ViewHeader, Votes } from '../components/ui'
 import { hoursSummary } from '../lib/hours'
 import { anchoredSlot, findSlot, interestScore } from '../lib/schedule'
 import { dayLabel, dayRange, fmtDuration } from '../lib/time'
-import { ideas, useStore } from '../store'
+import { ideas, inboxItems, useStore } from '../store'
 import type { Interest, Item, Trip } from '../types'
 
 type Filter = 'all' | 'unscheduled' | 'must' | 'everyone' | 'needsVote' | 'tbd'
 
 const FILTERS: { id: Filter; label: string }[] = [
   { id: 'all', label: 'All' },
-  { id: 'unscheduled', label: 'Not planned' },
+  { id: 'unscheduled', label: 'Unplanned' },
   { id: 'must', label: 'Must-dos' },
   { id: 'everyone', label: 'Everyone’s in' },
-  { id: 'needsVote', label: 'Needs my vote' },
+  { id: 'needsVote', label: 'To vote' },
   { id: 'tbd', label: 'Needs details' },
 ]
 
@@ -48,40 +48,33 @@ export default function IdeasView() {
     .filter((i) => !ql || i.title.toLowerCase().includes(ql) || i.tags.some((t) => t.includes(ql)) || i.notes?.toLowerCase().includes(ql))
     .sort((a, b) => interestScore(b) - interestScore(a) || a.createdAt - b.createdAt)
 
+  const inbox = inboxItems(trip).length
   return (
-    <div className="flex flex-col gap-3 px-3 pb-8 pt-3">
-      <div className="flex items-end justify-between px-1">
-        <div className="text-[28px] font-bold leading-tight tracking-tight">Ideas</div>
-        <span className="mb-1 font-mono text-xs t-sub">{ideas(trip).length} ideas</span>
+    <div>
+      <ViewHeader title="Ideas" sub={`${ideas(trip).length} ideas${inbox ? ` · ${inbox} in the inbox` : ''}`}>
+        <div className="search3">
+          <label>
+            <Search />
+            <input placeholder="Search ideas" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search ideas" />
+          </label>
+          <button className="b2 soft" onClick={() => setPasting(true)} title="Paste a list"><ClipboardList /> List</button>
+          <button className="b2 pri" onClick={() => edit(addItem({}))}><Plus /> Idea</button>
+        </div>
+        <div className="chips3">
+          {FILTERS.map((f) => (
+            <button key={f.id} onClick={() => setFilter(f.id)} aria-pressed={filter === f.id}>{f.label}</button>
+          ))}
+        </div>
+      </ViewHeader>
+      <div className="desk">
+        <InboxBanner onReview={() => setReviewing(true)} />
+        <div className="tiles">
+          {items.map((i) => (
+            <Tile key={i.id} trip={trip} item={i} vote={i.interest[viewer]} onVote={(v) => setInterest(i.id, viewer, v)} onOpen={() => edit(i.id)} onSchedule={() => setScheduling(i)} />
+          ))}
+        </div>
+        {!items.length && <p className="py-8 text-center text-sm t-sub">Nothing here.</p>}
       </div>
-      <div className="flex gap-2">
-        <label className="relative flex-1">
-          <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 t-sub" />
-          <input className="input pl-9" placeholder="Search ideas, tags, notes" value={q} onChange={(e) => setQ(e.target.value)} />
-        </label>
-        <button className="btn-soft shrink-0 px-3" onClick={() => setPasting(true)} aria-label="Paste a list" title="Paste a list"><ClipboardList size={16} /> List</button>
-        <button className="btn shrink-0 px-3" onClick={() => edit(addItem({}))}><Plus size={16} /> Idea</button>
-      </div>
-      <InboxBanner onReview={() => setReviewing(true)} />
-      <div className="-mx-3 flex gap-1.5 overflow-x-auto px-3">
-        {FILTERS.map((f) => (
-          <button
-            key={f.id}
-            onClick={() => setFilter(f.id)}
-            aria-pressed={filter === f.id}
-            className="shrink-0 rounded-full px-3 py-1 text-[13px] font-medium"
-            style={filter === f.id ? { background: 'var(--ink)', color: 'var(--chrome)' } : { background: 'var(--chrome)', boxShadow: 'inset 0 0 0 1px var(--line)' }}
-          >
-            {f.label}
-          </button>
-        ))}
-      </div>
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-        {items.map((i) => (
-          <Tile key={i.id} trip={trip} item={i} vote={i.interest[viewer]} onVote={(v) => setInterest(i.id, viewer, v)} onOpen={() => edit(i.id)} onSchedule={() => setScheduling(i)} />
-        ))}
-      </div>
-      {!items.length && <p className="py-8 text-center text-sm t-sub">Nothing here.</p>}
       {scheduling && <ScheduleSheet trip={trip} item={scheduling} onClose={() => setScheduling(null)} />}
       {pasting && <PasteSheet onClose={() => setPasting(false)} onAdded={() => setReviewing(true)} />}
       {reviewing && (
@@ -103,6 +96,7 @@ const nextVote = (v?: Interest): Interest | null => {
   return i === INTERESTS.length - 1 ? null : INTERESTS[i + 1]
 }
 
+/** A bold tile at one height: what it is, who's in, your vote, and its slot on the plan. */
 function Tile({ trip, item: i, vote, onVote, onOpen, onSchedule }: {
   trip: Trip
   item: Item
@@ -113,44 +107,36 @@ function Tile({ trip, item: i, vote, onVote, onOpen, onSchedule }: {
 }) {
   const blocks = trip.blocks.filter((b) => b.itemId === i.id).sort((a, b) => a.day.localeCompare(b.day) || a.start - b.start)
   const V = vote ? INTEREST_META[vote] : null
-  const when = blocks[0] ? `${dayLabel(blocks[0].day).split(',')[0]} ${clock(blocks[0].start)}` : null
+  const k = objectKind(i)
+  const Glyph = glyphFor(i)
+  const first = blocks[0]
+  const when = first ? `${Number(first.day.slice(8))} ${dayLabel(first.day).split(' ')[1]} · ${clock(first.start)}${blocks.length > 1 ? ` +${blocks.length - 1}` : ''}` : null
   return (
-    <div role="button" tabIndex={0} onClick={onOpen} onKeyDown={(e) => e.key === 'Enter' && onOpen()} className="cursor-pointer">
-      <ObjectCard
-        item={i}
-        size="t"
-        tz={trip.timezone}
-        people={trip.people}
-        eyebrow={undefined}
-        sig={
-          <>
-            <span className="font-mono text-[11px] font-semibold" style={{ opacity: when ? 1 : 0.55 }}>
-              {when ?? 'Not planned'}{blocks.length > 1 && ` +${blocks.length - 1}`}
-            </span>
-            <span className="flex gap-1">
-              <button
-                className="grid h-7 w-7 place-items-center rounded-full"
-                style={{ background: V ? V.color : 'transparent', color: V ? '#fff' : 'currentColor', boxShadow: V ? 'none' : 'inset 0 0 0 1px currentColor', opacity: V ? 1 : 0.6 }}
-                onClick={(e) => { e.stopPropagation(); onVote(nextVote(vote)) }}
-                aria-label={V ? `Your vote: ${V.label}. Tap to change` : 'Vote'}
-                title={V ? V.label : 'Tap to vote'}
-              >
-                {V ? <V.Icon size={14} fill={vote === 'must' ? 'currentColor' : 'none'} /> : <Heart size={14} />}
-              </button>
-              {i.type !== 'note' && (
-                <button
-                  className="grid h-7 w-7 place-items-center rounded-full"
-                  style={{ boxShadow: 'inset 0 0 0 1px currentColor', opacity: 0.6 }}
-                  onClick={(e) => { e.stopPropagation(); onSchedule() }}
-                  aria-label="Add to a day"
-                >
-                  <CalendarPlus size={14} />
-                </button>
-              )}
-            </span>
-          </>
-        }
-      />
+    <div role="button" tabIndex={0} onClick={onOpen} onKeyDown={(e) => e.key === 'Enter' && onOpen()} className={cx('t3', k, k === 'resv' && i.tbd && 'open-resv')}>
+      <div className="tb">
+        <div className="eb"><Glyph /><span>{i.tbd && k === 'resv' ? 'Not booked' : defaultEyebrow(i).replace(/ · (open till|closed).*/, '')}</span></div>
+        <div className="tt">{i.title}</div>
+        {k === 'post' && <span className="stp stamp"><i><Glyph /></i></span>}
+        <div className="vt">
+          <Votes item={i} people={trip.people} />
+          <button
+            className={cx('myv', !V && 'none')}
+            style={V ? { background: V.color } : undefined}
+            onClick={(e) => { e.stopPropagation(); onVote(nextVote(vote)) }}
+            aria-label={V ? `Your vote: ${V.label}. Tap to change` : 'Vote'}
+            title={V ? V.label : 'Tap to vote'}
+          >
+            {V ? <V.Icon fill={vote === 'must' ? 'currentColor' : 'none'} /> : <Heart />}
+          </button>
+        </div>
+      </div>
+      {when ? (
+        <button className="tf2b" onClick={(e) => { e.stopPropagation(); onSchedule() }} aria-label={`On the plan ${when}. Add another time`}><CalendarDays /><span>{when}</span></button>
+      ) : k !== 'note' ? (
+        <button className="tf2b add" onClick={(e) => { e.stopPropagation(); onSchedule() }}><CalendarPlus /><span>Add to a day</span></button>
+      ) : (
+        <div className="tf2b"><span>{i.tbd ?? 'To-do'}</span></div>
+      )}
     </div>
   )
 }

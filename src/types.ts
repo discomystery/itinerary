@@ -14,6 +14,15 @@ export type ItemType = 'place' | 'event' | 'reservation' | 'area' | 'transport' 
 
 export type Interest = 'must' | 'yes' | 'meh' | 'no'
 
+/** The paper object an item is drawn as. */
+export type CardKind = 'ticket' | 'pass' | 'fare' | 'xfer' | 'resv' | 'key' | 'tag' | 'car' | 'voucher' | 'cpass' | 'post' | 'map' | 'note'
+
+export interface CheckItem {
+  id: Id
+  text: string
+  done: boolean
+}
+
 export interface LatLng {
   lat: number
   lng: number
@@ -62,6 +71,25 @@ export interface Item {
   createdAt: number
   /** Added in bulk and waiting for someone to review it in the Inbox. */
   inbox?: InboxInfo
+  /** Which paper object to draw. Worked out from type and tags when unset. */
+  card?: CardKind
+  /** A style within the kind, e.g. a boarding pass for a 'train' or a 'timed' ticket. */
+  variant?: string
+  /** Kind-specific fields (seat, gate, door code…), keyed by field id. */
+  details?: Record<string, string>
+  checklist?: CheckItem[]
+  /** Day a postcard was stamped visited. */
+  visited?: string
+}
+
+export type DocKind = 'passport' | 'entry' | 'insurance' | 'loyalty' | 'other'
+
+/** Trip-level papers that never go on the schedule. */
+export interface TravelDoc {
+  id: Id
+  kind: DocKind
+  label: string
+  value?: string
 }
 
 export interface PlaceMatch {
@@ -112,4 +140,5 @@ export interface Trip {
   items: Item[]
   blocks: Block[]
   defaultMode: TransitMode
+  docs?: TravelDoc[]
 }

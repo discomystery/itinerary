@@ -158,13 +158,25 @@ export const useStore = create<State>()(
           })),
 
         replaceTrip: (trip) => {
-          mutate(() => trip)
+          // Your travel documents are yours: a shared or sample trip doesn't replace them.
+          mutate((cur) => ({ ...trip, docs: trip.docs ?? cur.docs }))
           set({ viewer: trip.people[0]?.id ?? '', day: trip.startDay })
         },
       }
     },
     {
       name: 'itinerary-v1',
+      version: 2,
+      migrate: (state, version) => {
+        const s = state as { trip?: Trip }
+        // v2: stays run check in → check out so they show on the days between.
+        const stay = s.trip?.items.find((i) => i.id === 'i-stay')
+        if (version < 2 && stay && !stay.anchors.length) {
+          const seed = helsinkiTrip().items.find((i) => i.id === 'i-stay')!
+          stay.anchors = seed.anchors
+        }
+        return state as State
+      },
       partialize: (s) => ({ trip: s.trip, viewer: s.viewer, day: s.day, tab: s.tab, simNow: s.simNow, mapsApp: s.mapsApp }),
     },
   ),
