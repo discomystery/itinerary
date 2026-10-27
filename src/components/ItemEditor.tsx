@@ -4,9 +4,11 @@ import { hoursError, hoursSummary } from '../lib/hours'
 import { searchPlaces, type PlaceHit } from '../lib/places'
 import { dayLabel, dayRange, fmtTime, parseHHMM, toHHMM } from '../lib/time'
 import { uid, useStore } from '../store'
-import type { Anchor, Item, ItemType, LatLng } from '../types'
+import type { Anchor, CardKind, Item, LatLng } from '../types'
 import { Clock, ExternalLink, Lock, Map as MapIcon, MapPin, Plus, Sun, X } from 'lucide-react'
-import { Avatar, cx, Field, InterestPicker, Sheet, TYPE_META } from './ui'
+import { cardKind, det, fieldsFor, KIND_ORDER, KINDS, variantOf } from '../lib/cards'
+import { glyphFor, ObjectCard } from './objects'
+import { Avatar, cx, Field, InterestPicker, Sheet } from './ui'
 
 const TZ_CHOICES = ['America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles', 'Europe/London', 'UTC']
 
@@ -20,6 +22,7 @@ export default function ItemEditor({ id, onClose }: { id: string; onClose: () =>
   const days = dayRange(trip.startDay, trip.endDay)
   const herr = hoursError(d.hours)
   const blocks = trip.blocks.filter((b) => b.itemId === id)
+  const k = cardKind(d)
 
   const save = () => {
     updateItem(id, d)
@@ -54,18 +57,19 @@ export default function ItemEditor({ id, onClose }: { id: string; onClose: () =>
           <input className="input" value={d.title} onChange={(e) => set({ title: e.target.value })} />
         </Field>
 
-        <div className="flex flex-wrap gap-1">
-          {(Object.keys(TYPE_META) as ItemType[]).map((t) => {
-            const M = TYPE_META[t]
-            const on = d.type === t
-            return (
-              <button key={t} onClick={() => set({ type: t })} aria-pressed={on} className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium"
-                style={on ? { background: 'var(--ink)', color: 'var(--chrome)' } : { boxShadow: 'inset 0 0 0 1px var(--line)' }}>
-                <M.Icon size={13} /> {M.label}
-              </button>
-            )
-          })}
+        <div className="pointer-events-none" aria-hidden="true" inert>
+          <ObjectCard item={d} tz={trip.timezone} open />
         </div>
+
+        <CardPicker item={d} onChange={set} />
+
+        <DetailFields item={d} onChange={set} />
+
+        {(k === 'note' || (k === 'tag' && variantOf(d) !== 'hostel')) && (
+          <ChecklistEditor title={k === 'note' ? 'Steps' : 'Before you leave'} item={d} onChange={set} />
+        )}
+
+        {k === 'cpass' && <CoversPicker item={d} items={trip.items} onChange={set} />}
 
         <div>
           <div className="label mb-1.5">Who's interested</div>
@@ -85,15 +89,15 @@ export default function ItemEditor({ id, onClose }: { id: string; onClose: () =>
           </ul>
         </div>
 
-        {d.type !== 'note' && <LocationPicker item={d} center={trip.center} onChange={set} />}
+        {d.type !== 'note' && <LocationPicker item={d} center={trip.center} onChange={set} label={WHERE[k]} />}
 
-        {d.type === 'area' && (
+        {k === 'map' && (
           <Field label={`Area size: ~${d.areaRadius ?? 400} m radius`}>
             <input type="range" min={100} max={2000} step={50} className="w-full" value={d.areaRadius ?? 400} onChange={(e) => set({ areaRadius: Number(e.target.value) })} />
           </Field>
         )}
 
-        <Field
+        {['post', 'map', 'ticket', 'resv'].includes(k) && <Field
           label="Opening hours"
           hint={
             herr ? <span style={{ color: '#c8102e' }}>Can't read that: {herr}</span> : (
@@ -116,7 +120,7 @@ export default function ItemEditor({ id, onClose }: { id: string; onClose: () =>
               </span>
             )}
           </div>
-        </Field>
+        </Field>}
 
         <div>
           <div className="label mb-1.5">How long</div>
@@ -135,12 +139,12 @@ export default function ItemEditor({ id, onClose }: { id: string; onClose: () =>
           <Sun size={15} className="t-sub" /> Best while it's light out
         </label>
 
-        <AnchorEditor anchors={d.anchors} days={days} tripTz={trip.timezone} onChange={(anchors) => set({ anchors })} />
+        <AnchorEditor anchors={d.anchors} days={days} tripTz={trip.timezone} presets={KINDS[k].times} onChange={(anchors) => set({ anchors })} />
 
         <Field label="Tags" hint="Comma separated">
           <input className="input" value={d.tags.join(', ')} onChange={(e) => set({ tags: e.target.value.split(',').map((t) => t.trim().toLowerCase()).filter(Boolean) })} />
         </Field>
-        <Field label="Notes">
+        <Field label={k === 'post' ? 'Note (written on the postcard)' : 'Notes'}>
           <textarea className="input min-h-20" value={d.notes ?? ''} onChange={(e) => set({ notes: e.target.value || undefined })} />
         </Field>
         <Field label="Link">
@@ -155,13 +159,14 @@ export default function ItemEditor({ id, onClose }: { id: string; onClose: () =>
   )
 }
 
-function AnchorEditor({ anchors, days, tripTz, onChange }: { anchors: Anchor[]; days: string[]; tripTz: string; onChange: (a: Anchor[]) => void }) {
+function AnchorEditor({ anchors, days, tripTz, presets, onChange }: { anchors: Anchor[]; days: string[]; tripTz: string; presets?: string[]; onChange: (a: Anchor[]) => void }) {
+  const nextLabel = presets?.find((p) => !anchors.some((a) => a.label.startsWith(p)))
   const upd = (id: string, p: Partial<Anchor>) => onChange(anchors.map((a) => (a.id === id ? { ...a, ...p } : a)))
   return (
     <div>
       <div className="label mb-1.5">Set times</div>
       <p className="mb-2 text-xs t-sub">
-        Moments that matter, like <i>Doors 6:30 (soft)</i> or <i>Puck drop 7:00 (hard)</i>. Hard ones get flagged when you'd miss them.
+        Moments that matter, like <i>Doors 6:30 (soft)</i> or <i>Puck drop 7:00 (hard)</i>. Hard ones get flagged when you'd miss them. Stays, rentals and passes run from their first time to their last.
       </p>
       <ul className="space-y-2">
         {anchors.map((a) => (
@@ -191,9 +196,9 @@ function AnchorEditor({ anchors, days, tripTz, onChange }: { anchors: Anchor[]; 
       </ul>
       <button
         className="btn-soft mt-2 py-1"
-        onClick={() => onChange([...anchors, { id: uid('a'), label: anchors.length ? 'Starts' : 'Doors', day: anchors.at(-1)?.day ?? days[0], time: anchors.at(-1)?.time ?? 19 * 60, hard: anchors.length > 0 }])}
+        onClick={() => onChange([...anchors, { id: uid('a'), label: nextLabel ?? (anchors.length ? 'Starts' : 'Doors'), day: anchors.at(-1)?.day ?? days[0], time: anchors.at(-1)?.time ?? 19 * 60, hard: anchors.length > 0 }])}
       >
-        <Plus size={14} /> Add a time
+        <Plus size={14} /> Add {nextLabel ? `“${nextLabel}”` : 'a time'}
       </button>
     </div>
   )
@@ -204,7 +209,7 @@ function ClickToSet({ onPick }: { onPick: (p: LatLng) => void }) {
   return null
 }
 
-function LocationPicker({ item, center, onChange }: { item: Item; center: LatLng; onChange: (p: Partial<Item>) => void }) {
+function LocationPicker({ item, center, onChange, label }: { item: Item; center: LatLng; onChange: (p: Partial<Item>) => void; label?: string }) {
   const [q, setQ] = useState('')
   const [hits, setHits] = useState<PlaceHit[] | null>(null)
   const [busy, setBusy] = useState(false)
@@ -240,7 +245,7 @@ function LocationPicker({ item, center, onChange }: { item: Item; center: LatLng
   return (
     <div>
       <div className="label mb-1.5">
-        {item.type === 'area' ? 'Area' : 'Where'}
+        {label ?? (item.type === 'area' ? 'Area' : 'Where')}
       </div>
       {item.location ? (
         <div className="mb-2 flex items-center gap-2 text-sm">
@@ -281,6 +286,137 @@ function LocationPicker({ item, center, onChange }: { item: Item; center: LatLng
           <p className="chrome px-2 py-1 text-xs t-sub">Tap the map to set the spot</p>
         </div>
       )}
+    </div>
+  )
+}
+
+const WHERE: Partial<Record<CardKind, string>> = {
+  map: 'Area',
+  key: 'Hotel address',
+  tag: 'Address',
+  car: 'Pick up at',
+  xfer: 'Pickup spot',
+  voucher: 'Where it happens',
+  pass: 'Leaves from',
+  fare: 'Starts at',
+}
+
+/** Which paper object this is, and its style within the kind. */
+function CardPicker({ item, onChange }: { item: Item; onChange: (p: Partial<Item>) => void }) {
+  const k = cardKind(item)
+  const v = variantOf(item)
+  const variants = KINDS[k].variants
+  return (
+    <div>
+      <div className="label mb-1.5">Card</div>
+      <div className="flex flex-wrap gap-1">
+        {KIND_ORDER.map((kind) => {
+          const G = glyphFor({ ...item, card: kind, variant: undefined })
+          const on = k === kind
+          return (
+            <button
+              key={kind}
+              onClick={() => onChange({ card: kind, type: KINDS[kind].type, variant: undefined })}
+              aria-pressed={on}
+              className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium"
+              style={on ? { background: 'var(--ink)', color: 'var(--chrome)' } : { boxShadow: 'inset 0 0 0 1px var(--line)' }}
+            >
+              <G size={13} /> {KINDS[kind].label}
+            </button>
+          )
+        })}
+      </div>
+      {variants && (
+        <div className="seg mt-2" style={{ gridTemplateColumns: `repeat(${variants.length}, 1fr)` }}>
+          {variants.map((x) => (
+            <button key={x.id} aria-pressed={v === x.id} onClick={() => onChange({ variant: x.id })}>{x.label}</button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** The fields printed on this kind of card: seat, gate, door code… */
+function DetailFields({ item, onChange }: { item: Item; onChange: (p: Partial<Item>) => void }) {
+  const fields = fieldsFor(cardKind(item), variantOf(item))
+  if (!fields.length) return null
+  const put = (id: string, value: string) => {
+    const details = { ...item.details, [id]: value }
+    if (!value) delete details[id]
+    onChange({ details })
+  }
+  return (
+    <div>
+      <div className="label mb-1.5">On the card</div>
+      <div className="grid grid-cols-2 gap-2">
+        {fields.map((f) => (
+          <label key={f.id} className={cx('text-xs t-sub', f.wide && 'col-span-2')}>
+            {f.label}
+            {f.multi ? (
+              <textarea className="input mt-0.5 min-h-16" placeholder={f.ph} value={item.details?.[f.id] ?? ''} onChange={(e) => put(f.id, e.target.value)} />
+            ) : (
+              <input className="input mt-0.5" placeholder={f.ph} value={item.details?.[f.id] ?? ''} onChange={(e) => put(f.id, e.target.value)} />
+            )}
+          </label>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function ChecklistEditor({ title, item, onChange }: { title: string; item: Item; onChange: (p: Partial<Item>) => void }) {
+  const list = item.checklist ?? []
+  const [text, setText] = useState('')
+  return (
+    <div>
+      <div className="label mb-1.5">{title}</div>
+      <ul className="space-y-1">
+        {list.map((c) => (
+          <li key={c.id} className="flex items-center gap-2">
+            <input type="checkbox" checked={c.done} onChange={() => onChange({ checklist: list.map((x) => (x.id === c.id ? { ...x, done: !x.done } : x)) })} />
+            <input className="input py-1" value={c.text} onChange={(e) => onChange({ checklist: list.map((x) => (x.id === c.id ? { ...x, text: e.target.value } : x)) })} />
+            <button className="btn-ghost px-2" onClick={() => onChange({ checklist: list.filter((x) => x.id !== c.id) })} aria-label="Remove"><X size={15} /></button>
+          </li>
+        ))}
+      </ul>
+      <form
+        className="mt-1.5 flex gap-2"
+        onSubmit={(e) => {
+          e.preventDefault()
+          if (!text.trim()) return
+          onChange({ checklist: [...list, { id: uid('c'), text: text.trim(), done: false }] })
+          setText('')
+        }}
+      >
+        <input className="input py-1" placeholder="Add a step" value={text} onChange={(e) => setText(e.target.value)} />
+        <button className="btn-soft shrink-0 py-1">Add</button>
+      </form>
+    </div>
+  )
+}
+
+/** A city pass lists the plans it gets you into. */
+function CoversPicker({ item, items, onChange }: { item: Item; items: Item[]; onChange: (p: Partial<Item>) => void }) {
+  const ids = new Set((det(item, 'covers') ?? '').split(',').filter(Boolean))
+  const options = items.filter((i) => !i.inbox && i.id !== item.id && ['post', 'ticket', 'voucher', 'fare'].includes(cardKind(i)))
+  const toggle = (id: string) => {
+    const next = new Set(ids)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    onChange({ details: { ...item.details, covers: [...next].join(',') } })
+  }
+  return (
+    <div>
+      <div className="label mb-1.5">What it covers</div>
+      <div className="flex flex-wrap gap-1">
+        {options.map((i) => (
+          <button key={i.id} onClick={() => toggle(i.id)} aria-pressed={ids.has(i.id)} className="rounded-full px-2.5 py-1 text-xs font-medium"
+            style={ids.has(i.id) ? { background: '#0e6e6a', color: '#fff' } : { boxShadow: 'inset 0 0 0 1px var(--line)' }}>
+            {i.title}
+          </button>
+        ))}
+      </div>
     </div>
   )
 }

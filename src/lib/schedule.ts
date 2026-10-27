@@ -41,7 +41,8 @@ export function anchoredSlot(item: Item, tripTz: string): { day: string; start: 
   if (!item.anchors.length) return null
   const conv = item.anchors.map((a) => anchorInTrip(a, tripTz))
   const day = conv.map((c) => c.day).sort()[0]
-  const mins = item.anchors.map((a) => anchorOnDay(a, day, tripTz))
+  // Only the first day's times: a stay's check-out days later isn't part of this slot.
+  const mins = item.anchors.filter((_, n) => conv[n].day === day).map((a) => anchorOnDay(a, day, tripTz))
   const start = Math.min(...mins)
   const lastHard = Math.max(...mins)
   return { day, start, end: Math.max(lastHard + item.duration.typical, start + item.duration.min) }

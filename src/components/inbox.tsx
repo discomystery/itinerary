@@ -1,4 +1,4 @@
-import { CalendarPlus, Check, ClipboardPaste, Inbox, Link2, Loader2, MapPinOff, RotateCw, Search, Trash2, X } from 'lucide-react'
+import { CalendarPlus, Check, ChevronRight, ClipboardPaste, Inbox, Link2, Loader2, Mail, MapPinOff, RotateCw, Search, Trash2, X } from 'lucide-react'
 import { useMemo, useRef, useState } from 'react'
 import { CircleMarker, MapContainer, TileLayer } from 'react-leaflet'
 import { parsePaste, type ParsedLine } from '../lib/paste'
@@ -146,23 +146,23 @@ export function PasteSheet({ onClose, onAdded }: { onClose: () => void; onAdded:
 
 /* ------------------------------ Inbox banner ---------------------------- */
 
+/** New ideas arrive like mail: an airmail envelope at the top of Ideas. */
 export function InboxBanner({ onReview }: { onReview: () => void }) {
   const trip = useStore((s) => s.trip)
   const items = inboxItems(trip)
   if (!items.length) return null
   const looking = items.filter((i) => i.inbox?.lookup === 'pending').length
   return (
-    <button className="panel flex items-center gap-3 text-left" onClick={onReview}>
-      <span className="grid h-9 w-9 flex-none place-items-center rounded-full text-white" style={{ background: 'var(--act)' }}>
-        <Inbox size={18} />
+    <button className="env" onClick={onReview}>
+      <span className="ic3"><Mail /></span>
+      <span className="x">
+        <b>Inbox</b>
+        <small>
+          {looking ? (<><Loader2 className="animate-spin" /> Finding {looking} on the map…</>) : `${items.length} new idea${items.length === 1 ? '' : 's'} to review`}
+        </small>
       </span>
-      <span className="min-w-0 flex-1">
-        <span className="block text-sm font-semibold">{items.length} new idea{items.length === 1 ? '' : 's'} to review</span>
-        <span className="flex items-center gap-1 font-mono text-[11px] t-sub">
-          {looking ? (<><Loader2 size={11} className="animate-spin" /> Finding {looking} on the map…</>) : 'Keep, vote, or place each one'}
-        </span>
-      </span>
-      <span className="btn px-3 py-1.5 text-xs">Review</span>
+      <span className="bd">{items.length}</span>
+      <ChevronRight />
     </button>
   )
 }
