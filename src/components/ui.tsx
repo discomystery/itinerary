@@ -16,7 +16,7 @@ import {
   X,
 } from 'lucide-react'
 import { type ReactNode, useEffect } from 'react'
-import type { Interest, Item, ItemType, Person } from '../types'
+import type { Block, Interest, Item, ItemType, Person } from '../types'
 import type { Issue, Severity } from '../lib/schedule'
 
 export const TYPE_META: Record<ItemType, { Icon: LucideIcon; label: string; color: string }> = {
@@ -110,8 +110,16 @@ export function InterestPicker({ value, onChange, size = 'md' }: {
   )
 }
 
-/** Stamped initials for everyone who wants to go. */
-export function Votes({ item, people, min = 'yes' }: { item: Item; people: Person[]; min?: 'must' | 'yes' }) {
+/** Stamped initials for everyone who wants to go, or, on a plan the organizer assigned, everyone going. */
+export function Votes({ item, people, block, min = 'yes' }: { item: Item; people: Person[]; block?: Block; min?: 'must' | 'yes' }) {
+  if (block?.who?.length) {
+    const going = people.filter((p) => block.who!.includes(p.id))
+    return (
+      <span className="votes assigned" title={`Going: ${going.map((p) => p.name).join(', ')}`}>
+        {going.map((p) => <span key={p.id} style={{ background: p.color }}>{p.name.slice(0, 1).toUpperCase()}</span>)}
+      </span>
+    )
+  }
   const keep = (v?: Interest) => v === 'must' || (min === 'yes' && v === 'yes')
   const voters = people.filter((p) => keep(item.interest[p.id]))
   if (!voters.length) return null

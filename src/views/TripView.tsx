@@ -1,4 +1,4 @@
-import { BookUser, CalendarPlus, Download, Link2, Pencil, Plus, Share, ShieldCheck, Stamp, Star, Upload, UserPlus, Wallet, X } from 'lucide-react'
+import { BookUser, CalendarPlus, ClipboardCheck, Download, Link2, Pencil, Plus, Share, ShieldCheck, Stamp, Star, Upload, UserPlus, Wallet, X } from 'lucide-react'
 import { type ReactNode, useMemo, useRef, useState } from 'react'
 import { MODE_STYLE } from '../components/rail'
 import { Avatar, Field, Sheet, ViewHeader } from '../components/ui'
@@ -31,7 +31,8 @@ export default function TripView() {
   const viewer = useStore((s) => s.viewer)
   const simNow = useStore((s) => s.simNow)
   const mapsApp = useStore((s) => s.mapsApp)
-  const { mutate, addPerson, updatePerson, removePerson, replaceTrip, setViewer, setSimNow, setMapsApp } = useStore()
+  const organizer = useStore((s) => s.organizer)
+  const { mutate, addPerson, updatePerson, removePerson, replaceTrip, setViewer, setOrganizer, setSimNow, setMapsApp } = useStore()
   const now = useNow()
   const [newPerson, setNewPerson] = useState('')
   const [msg, setMsg] = useState<string | null>(null)
@@ -88,7 +89,7 @@ export default function TripView() {
           </div>
         </div>
 
-        <div className="sl"><span>People</span><span>Votes are cast as you</span></div>
+        <div className="sl"><span>People</span><span>{organizer ? 'You’re the organizer' : 'Votes are cast as you'}</span></div>
         <div className="pn np rows">
           {trip.people.map((p) => (
             <div key={p.id} className="person">
@@ -100,12 +101,21 @@ export default function TripView() {
                 <input value={p.name} onChange={(e) => updatePerson(p.id, { name: e.target.value })} aria-label="Name" />
                 <small>{musts(p.id)} must-do{musts(p.id) === 1 ? '' : 's'}</small>
               </span>
-              {p.id === viewer ? <span className="you">You</span> : <button className="sw" onClick={() => setViewer(p.id)}>Vote as</button>}
+              {p.id === viewer && !organizer ? <span className="you">You</span> : <button className="sw" onClick={() => setViewer(p.id)}>Vote as</button>}
               {trip.people.length > 1 && p.id !== viewer && (
                 <button className="btn-ghost -mr-2 px-1.5" onClick={() => confirm(`Remove ${p.name} and their votes?`) && removePerson(p.id)} aria-label={`Remove ${p.name}`}><X size={15} /></button>
               )}
             </div>
           ))}
+          <div className="person">
+            <span className="orgmark big"><ClipboardCheck /></span>
+            <span className="x">
+              <b>Organizer</b>
+              <small>Set anyone's votes and who's going</small>
+            </span>
+            {organizer && <span className="you">On</span>}
+            <button className="sw" onClick={() => setOrganizer(!organizer)}>{organizer ? 'Turn off' : 'Turn on'}</button>
+          </div>
           <form
             className="person add"
             onSubmit={(e) => {

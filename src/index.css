@@ -793,3 +793,49 @@ button.o:active { transform: scale(0.99); }
   .printout .empty { color: #5b6170; font-style: italic; margin: 4px 0 0; }
   .printout footer { margin-top: 12px; font-size: 8pt; color: #8a8f99; }
 }
+
+/* Who's using this device: a person, or the organizer. */
+.whoami { display: flex; align-items: center; gap: 6px; border-radius: 999px; padding: 2px 6px 2px 2px; font-size: 12px; }
+.whoami.org { background: var(--ink); color: var(--chrome); }
+.whoami.org select { color: inherit; }
+.whoami.org option { color: var(--ink); background: var(--chrome); }
+.orgmark { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; background: var(--chrome); color: var(--ink); flex: none; }
+.orgmark svg { width: 13px; height: 13px; }
+
+/* The vote tray: every choice at once, over the bottom of an idea tile. */
+.vtray { position: absolute; left: 6px; right: 6px; bottom: 5px; z-index: 2; display: grid; grid-template-columns: repeat(4, 1fr); gap: 2px; padding: 4px; border-radius: 12px;
+  background: var(--chrome); color: var(--ink); box-shadow: 0 0 0 1px var(--line), 0 6px 18px rgb(20 26 34 / 0.22); animation: vtray-in 0.14s ease-out; cursor: default; }
+@keyframes vtray-in { from { opacity: 0; transform: translateY(4px) scale(0.97); } }
+.vtray button { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 3px 0 2px; border: 0; background: none; border-radius: 8px; color: var(--sub); cursor: pointer; min-width: 0; }
+.vtray button i { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; box-shadow: inset 0 0 0 1.5px currentColor; color: var(--vc); }
+.vtray button svg { width: 14px; height: 14px; }
+.vtray button span { font: 600 9px/1 var(--mono); letter-spacing: 0.04em; text-transform: uppercase; white-space: nowrap; }
+.vtray button[aria-pressed='true'] i { background: var(--vc); color: #fff; box-shadow: none; }
+.vtray button[aria-pressed='true'] span { color: var(--ink); }
+@media (hover: hover) { .vtray button:hover { background: color-mix(in srgb, var(--vc) 10%, transparent); } }
+.t3 .myv.grp { width: auto; padding: 0 8px 0 6px; gap: 4px; display: inline-flex; border-radius: 13px; background: var(--p-ink); color: var(--p-paper); font: 700 11px/1 var(--mono); }
+.t3 .myv.grp.todo { background: transparent; color: var(--p-ink); box-shadow: inset 0 0 0 1.5px currentColor; }
+
+/* Organizer: everyone's votes on one idea. */
+.votegrid { display: flex; flex-direction: column; gap: 6px; }
+.votegrid li { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 12px; box-shadow: inset 0 0 0 1px var(--line); }
+.votegrid li.everyone { background: color-mix(in srgb, var(--ink) 5%, transparent); }
+.votegrid .x { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.votegrid .x b { font-size: 14px; }
+.votegrid .x small { font-size: 11px; color: var(--sub); }
+.votegrid .x small.todo { color: var(--warn-fg, #b45309); }
+
+/* Who's going on a plan: the organizer taps people in and out. */
+.going { display: flex; flex-wrap: wrap; gap: 6px; }
+.going button { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px 3px 3px; border-radius: 999px; border: 0; background: none; color: var(--ink); font: 600 13px/1 var(--sans); box-shadow: inset 0 0 0 1px var(--line); cursor: pointer; }
+.going button svg { width: 15px; height: 15px; margin-left: 5px; }
+.going button[aria-pressed='true'] { background: var(--ink); color: var(--chrome); box-shadow: none; }
+.going button.out { color: var(--sub); }
+.going button.out > span { filter: grayscale(1); opacity: 0.45; }
+.going button:disabled { cursor: default; }
+.going button:disabled:not(.out) { background: none; color: var(--ink); box-shadow: inset 0 0 0 1px var(--line); }
+.votes.assigned > span { box-shadow: 0 0 0 1.5px var(--p-paper, #fff), 0 0 0 2.5px var(--p-ink, #1b1f26); }
+.orgmark.big { width: 28px; height: 28px; background: var(--ink); color: var(--chrome); }
+.orgmark.big svg { width: 15px; height: 15px; }
+.person .x b { display: block; font-weight: 600; }
+.t3.open-resv .myv.grp { background: var(--ink); color: var(--chrome); } .t3.open-resv .myv.grp.todo { background: none; color: var(--ink); }

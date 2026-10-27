@@ -14,6 +14,8 @@ export type Tab = 'now' | 'plan' | 'map' | 'ideas' | 'trip'
 interface State {
   trip: Trip
   viewer: Id
+  /** Organizer mode: set anyone's votes and who's going, without switching identity. This device only. */
+  organizer: boolean
   tab: Tab
   day: string
   /** Pretend it's this instant (ms) — for testing the Now view before the trip. */
@@ -28,6 +30,7 @@ interface State {
   setTab: (t: Tab) => void
   setDay: (d: string) => void
   setViewer: (p: Id) => void
+  setOrganizer: (on: boolean) => void
   setSimNow: (ms: number | null) => void
   edit: (id: Id | null) => void
   select: (id: Id | null) => void
@@ -44,6 +47,8 @@ interface State {
   quietUpdateItem: (id: Id, p: Partial<Item>) => void
   deleteItem: (id: Id) => void
   setInterest: (itemId: Id, personId: Id, v: Interest | null) => void
+  /** Everyone's vote at once, as one undo step. */
+  setInterestAll: (itemId: Id, v: Interest | null) => void
 
   addBlock: (b: Omit<Block, 'id'>) => Id
   updateBlock: (id: Id, p: Partial<Block>) => void
@@ -68,6 +73,7 @@ export const useStore = create<State>()(
       return {
         trip: seed,
         viewer: seed.people[0].id,
+        organizer: false,
         tab: 'plan',
         day: '2026-11-12',
         simNow: null,
@@ -78,7 +84,8 @@ export const useStore = create<State>()(
 
         setTab: (tab) => set({ tab }),
         setDay: (day) => set({ day }),
-        setViewer: (viewer) => set({ viewer }),
+        setViewer: (viewer) => set({ viewer, organizer: false }),
+        setOrganizer: (organizer) => set({ organizer }),
         setSimNow: (simNow) => set({ simNow }),
         edit: (editing) => set({ editing }),
         select: (selected) => set({ selected }),
@@ -96,7 +103,7 @@ export const useStore = create<State>()(
             type: 'place',
             anchors: [],
             duration: { min: 30, typical: 60, max: 120 },
-            interest: { [get().viewer]: 'yes' },
+            interest: get().organizer ? {} : { [get().viewer]: 'yes' },
             tags: [],
             createdAt: Date.now(),
             ...p,
@@ -135,6 +142,11 @@ export const useStore = create<State>()(
               return { ...i, interest }
             }),
           })),
+        setInterestAll: (itemId, v) =>
+          mutate((t) => ({
+            ...t,
+            items: t.items.map((i) => (i.id === itemId ? { ...i, interest: v ? Object.fromEntries(t.people.map((p) => [p.id, v])) : {} } : i)),
+          })),
 
         addBlock: (b) => {
           const id = uid('b')
@@ -160,12 +172,13 @@ export const useStore = create<State>()(
               delete interest[id]
               return { ...i, interest }
             }),
+            blocks: t.blocks.map((b) => (b.who ? { ...b, who: b.who.filter((p) => p !== id) } : b)),
           })),
 
         replaceTrip: (trip) => {
           // Your travel documents are yours: a shared or sample trip doesn't replace them.
           mutate((cur) => ({ ...trip, docs: trip.docs ?? cur.docs }))
-          set({ viewer: trip.people[0]?.id ?? '', day: trip.startDay })
+          set({ viewer: trip.people[0]?.id ?? '', organizer: false, day: trip.startDay })
         },
       }
     },
@@ -184,7 +197,7 @@ export const useStore = create<State>()(
         }
         return state as State
       },
-      partialize: (s) => ({ trip: s.trip, viewer: s.viewer, day: s.day, tab: s.tab, simNow: s.simNow, mapsApp: s.mapsApp }),
+      partialize: (s) => ({ trip: s.trip, viewer: s.viewer, organizer: s.organizer, day: s.day, tab: s.tab, simNow: s.simNow, mapsApp: s.mapsApp }),
     },
   ),
 )
