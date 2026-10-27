@@ -7,6 +7,7 @@ import { Ribbons } from '../components/ribbons'
 import { Weather } from '../components/weather'
 import { cx, IssueList, Sheet, ViewHeader, Votes } from '../components/ui'
 import { daylight, hoursSummary, openSpans, openStatus } from '../lib/hours'
+import { useFetchRoutes, useRoutes } from '../lib/routeCache'
 import { type DayAnalysis, type Leg, analyzeDay, anchorOnDay, anchoredSlot, findSlot, interestScore, makeCtx, worstSeverity } from '../lib/schedule'
 import { dayLabel, dayRange, fmtDuration, parseHHMM, snap, toHHMM } from '../lib/time'
 import { costOf, currencyOf, fmtMoney, tripCosts } from '../lib/costs'
@@ -27,8 +28,14 @@ export default function PlanView() {
   const day = useStore((s) => s.day)
   const setDay = useStore((s) => s.setDay)
   const days = dayRange(trip.startDay, trip.endDay)
-  const analyses = useMemo(() => Object.fromEntries(days.map((d) => [d, analyzeDay(trip, d)])), [trip, days.join()])
-  const analysis = analyses[day] ?? analyzeDay(trip, day)
+  const routes = useRoutes((s) => s.routes)
+  const analyses = useMemo(
+    () => Object.fromEntries(days.map((d) => [d, analyzeDay(trip, d, makeCtx(trip, routes))])),
+    [trip, routes, days.join()],
+  )
+  const analysis = analyses[day] ?? analyzeDay(trip, day, makeCtx(trip, routes))
+  // Fetch the whole trip's legs, so issue dots on other days are real too.
+  useFetchRoutes(Object.values(analyses).flatMap((a) => a.missing))
   const now = useNow()
   const weather = useWeather(trip)
   const spend = useMemo(() => tripCosts(trip).byDay[day], [trip, day])
@@ -167,7 +174,7 @@ function ListView({ trip, day, analysis, unfolded, onToggle, onEdit, onMore, onL
     const leg = legByTo.get(b.id)
     const from = leg && trip.blocks.find((x) => x.id === leg.fromId)
     const to = ctx.loc(b)
-    const dir = to ? directionsUrl(from ? ctx.loc(from) : undefined, to, leg?.mode ?? trip.defaultMode, mapsApp) : undefined
+    const dir = to ? directionsUrl(from ? ctx.locEnd(from) : undefined, to, leg?.mode ?? trip.defaultMode, mapsApp) : undefined
     const open = unfolded === b.id
     rows.push({
       key: b.id,
@@ -370,7 +377,7 @@ function DayView({ trip, day, analysis, onEmpty, onOpen, onLeg }: {
                     const M = MODE_STYLE[leg.mode].Icon
                     return <M />
                   })()}
-                  {leg.minutes} min{leg.minutes * PX > 20 && ` · leave ${clock(b.start - leg.minutes)}`}
+                  {leg.minutes} min{leg.minutes * PX > 20 && ` · leave ${clock(leaveAt(trip, leg))}`}
                 </div>
               )}
               <div
@@ -568,7 +575,7 @@ function BlockSheet({ id, analysis, onClose, onLeg }: { id: string; analysis: Da
             <div className="sl" style={{ margin: '0 0 8px' }}><span>Getting here</span><span className="truncate pl-2">from {from?.title}</span></div>
             <button className={cx('gh3', leg.tight && 'tight')} style={railVars(leg.mode)} onClick={() => onLeg(leg)}>
               <span className="mi"><M.Icon /></span>
-              <span className="x"><b>{M.name} · {leg.minutes} min</b><small>{leg.tight ? `${leg.minutes - Math.max(0, leg.gap)} min short · ` : ''}Leave {clock(b.start - leg.minutes)}</small></span>
+              <span className="x"><b>{leg.line ?? M.name} · {leg.minutes} min</b><small>{leg.tight ? `${b.start - leg.gap - leaveAt(trip, leg)} min short · ` : ''}Leave {clock(leaveAt(trip, leg))}</small></span>
               <span className="ch">Change<ChevronRight /></span>
             </button>
           </div>

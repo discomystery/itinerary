@@ -1,6 +1,6 @@
-import type { Block, Trip } from '../types'
+import type { Block, Item, Trip } from '../types'
 import { cardKind, det, fieldsFor, variantOf } from './cards'
-import { wallToUtc } from './time'
+import { fmtTime, wallToUtc } from './time'
 
 // Calendar export: one VEVENT per scheduled plan, in UTC so every calendar app
 // places it right whatever timezone the phone is in.
@@ -28,6 +28,15 @@ export function fold(line: string): string {
   return out.join('\r\n ')
 }
 
+/** "RDU→JFK AA 4421, 7:05a–9:10a, seat 12A, conf ABC123" for each flight leg. */
+export function flightLegLines(item: Item): string[] {
+  return (item.legs ?? []).map((l) =>
+    [`${l.from}→${l.to}${l.flightNo ? ` ${l.flightNo}` : ''}`, `${fmtTime(l.depart.time)}–${fmtTime(l.arrive.time)}`, l.seat && `seat ${l.seat}`, l.confirmation && `conf ${l.confirmation}`]
+      .filter(Boolean)
+      .join(', '),
+  )
+}
+
 export function blockEvent(trip: Trip, b: Block, now = Date.now()): string[] {
   const item = trip.items.find((i) => i.id === b.itemId)
   if (!item) return []
@@ -35,7 +44,7 @@ export function blockEvent(trip: Trip, b: Block, now = Date.now()): string[] {
     .map((f) => [f.label, det(item, f.id)] as const)
     .filter((x): x is readonly [string, string] => !!x[1])
     .map(([k, v]) => `${k}: ${v.replace(/\n/g, ', ')}`)
-  const desc = [...fields, item.notes, item.tbd && `Still needs: ${item.tbd}`, item.url].filter(Boolean).join('\n')
+  const desc = [...flightLegLines(item), ...fields, item.notes, item.tbd && `Still needs: ${item.tbd}`, item.url].filter(Boolean).join('\n')
   const lines = [
     'BEGIN:VEVENT',
     `UID:${b.id}.${trip.id}@papermap`,

@@ -3,9 +3,10 @@ import { Circle, CircleMarker, MapContainer, TileLayer, useMapEvents } from 'rea
 import { hoursError, hoursSummary } from '../lib/hours'
 import { searchPlaces, type PlaceHit } from '../lib/places'
 import { MAPS_APP_NAME, placeUrl } from '../lib/transit'
-import { dayLabel, dayRange, fmtTime, parseHHMM, toHHMM } from '../lib/time'
+import { addDays, dayLabel, dayRange, fmtDuration, fmtTime, parseHHMM, toHHMM } from '../lib/time'
+import { airport, applyLegs, flightIssues, flightSpan, isLegAnchor, layovers, legFromCard, PER_LEG_FIELDS } from '../lib/flights'
 import { uid, useStore } from '../store'
-import type { Anchor, CardKind, Item, LatLng } from '../types'
+import type { Anchor, CardKind, FlightLeg, Item, LatLng } from '../types'
 import { Clock, ExternalLink, Lock, Map as MapIcon, MapPin, Plus, Sun, X } from 'lucide-react'
 import { cardKind, det, fieldsFor, KIND_ORDER, KINDS, variantOf } from '../lib/cards'
 import { currencyOf } from '../lib/costs'
@@ -16,7 +17,7 @@ const TZ_CHOICES = ['America/New_York', 'America/Chicago', 'America/Denver', 'Am
 
 export default function ItemEditor({ id, onClose }: { id: string; onClose: () => void }) {
   const trip = useStore((s) => s.trip)
-  const { updateItem, deleteItem } = useStore()
+  const { updateItem, updateBlock, deleteItem } = useStore()
   const original = trip.items.find((i) => i.id === id)
   const [d, setD] = useState<Item | undefined>(original)
   if (!original || !d) return null
@@ -25,9 +26,18 @@ export default function ItemEditor({ id, onClose }: { id: string; onClose: () =>
   const herr = hoursError(d.hours)
   const blocks = trip.blocks.filter((b) => b.itemId === id)
   const k = cardKind(d)
+  const isFlightPass = k === 'pass' && variantOf(d) === 'flight'
+  const hasLegs = isFlightPass && !!d.legs?.length
 
   const save = () => {
-    updateItem(id, d)
+    // Switching away from a flight drops its legs and the times they made.
+    const next = d.legs?.length && !isFlightPass ? { ...d, ...applyLegs(d, [], trip.timezone) } : d
+    updateItem(id, next)
+    // A flight's slot follows its legs.
+    if (next.legs?.length) {
+      const span = flightSpan(next.legs, trip.timezone)
+      for (const b of blocks) updateBlock(b.id, span)
+    }
     onClose()
   }
 
@@ -65,7 +75,11 @@ export default function ItemEditor({ id, onClose }: { id: string; onClose: () =>
 
         <CardPicker item={d} onChange={set} />
 
-        <DetailFields item={d} onChange={set} />
+        <DetailFields item={d} onChange={set} skip={hasLegs ? PER_LEG_FIELDS : undefined} />
+
+        {isFlightPass && (
+          <LegEditor item={d} day={d.anchors[0]?.day ?? trip.startDay} tripTz={trip.timezone} onChange={(legs) => set(applyLegs(d, legs, trip.timezone))} />
+        )}
 
         {(k === 'note' || (k === 'tag' && variantOf(d) !== 'hostel')) && (
           <ChecklistEditor title={k === 'note' ? 'Steps' : 'Before you leave'} item={d} onChange={set} />
@@ -124,7 +138,7 @@ export default function ItemEditor({ id, onClose }: { id: string; onClose: () =>
           </div>
         </Field>}
 
-        <div>
+        {!hasLegs && <div>
           <div className="label mb-1.5">How long</div>
           <div className="grid grid-cols-3 gap-2">
             {(['min', 'typical', 'max'] as const).map((k) => (
@@ -134,7 +148,7 @@ export default function ItemEditor({ id, onClose }: { id: string; onClose: () =>
               </label>
             ))}
           </div>
-        </div>
+        </div>}
 
         <Field label={`Cost (${currencyOf(trip)})`} hint="Optional. Adds up on the Trip tab and under each day.">
           <div className="flex gap-2">
@@ -163,7 +177,14 @@ export default function ItemEditor({ id, onClose }: { id: string; onClose: () =>
           <Sun size={15} className="t-sub" /> Best while it's light out
         </label>
 
-        <AnchorEditor anchors={d.anchors} days={days} tripTz={trip.timezone} presets={KINDS[k].times} onChange={(anchors) => set({ anchors })} />
+        {hasLegs ? (
+          <AnchorEditor
+            anchors={d.anchors.filter((a) => !isLegAnchor(a))} days={days} tripTz={trip.timezone} presets={['Boarding', 'Check-in closes']}
+            onChange={(anchors) => set({ anchors: [...anchors, ...d.anchors.filter(isLegAnchor)] })}
+          />
+        ) : (
+          <AnchorEditor anchors={d.anchors} days={days} tripTz={trip.timezone} presets={KINDS[k].times} onChange={(anchors) => set({ anchors })} />
+        )}
 
         <Field label="Tags" hint="Comma separated">
           <input className="input" value={d.tags.join(', ')} onChange={(e) => set({ tags: e.target.value.split(',').map((t) => t.trim().toLowerCase()).filter(Boolean) })} />
@@ -364,8 +385,8 @@ function CardPicker({ item, onChange }: { item: Item; onChange: (p: Partial<Item
 }
 
 /** The fields printed on this kind of card: seat, gate, door code… */
-function DetailFields({ item, onChange }: { item: Item; onChange: (p: Partial<Item>) => void }) {
-  const fields = fieldsFor(cardKind(item), variantOf(item))
+function DetailFields({ item, onChange, skip }: { item: Item; onChange: (p: Partial<Item>) => void; skip?: string[] }) {
+  const fields = fieldsFor(cardKind(item), variantOf(item)).filter((f) => !skip?.includes(f.id))
   if (!fields.length) return null
   const put = (id: string, value: string) => {
     const details = { ...item.details, [id]: value }
@@ -387,6 +408,82 @@ function DetailFields({ item, onChange }: { item: Item; onChange: (p: Partial<It
           </label>
         ))}
       </div>
+    </div>
+  )
+}
+
+/** A flight's legs. Starts from the card's single-flight fields when you add the first connection. */
+function LegEditor({ item, day, tripTz, onChange }: { item: Item; day: string; tripTz: string; onChange: (l: FlightLeg[]) => void }) {
+  const legs = item.legs ?? []
+  const upd = (id: string, p: Partial<FlightLeg>) => onChange(legs.map((l) => (l.id === id ? { ...l, ...p } : l)))
+  const lays = layovers(legs, tripTz)
+  const problems = flightIssues(legs, tripTz).filter((p) => p.severity === 'error')
+  const add = () => {
+    const have = legs.length ? legs : [legFromCard(item, day)]
+    const prev = have[have.length - 1]
+    const t = prev.arrive.time + 90
+    const depart = { day: t >= 1440 ? addDays(prev.arrive.day, 1) : prev.arrive.day, time: t % 1440, tz: prev.arrive.tz }
+    const lands = depart.time + 120
+    const arrive = { day: lands >= 1440 ? addDays(depart.day, 1) : depart.day, time: lands % 1440 }
+    onChange([...have, { id: uid('leg'), from: prev.to, to: '', depart, arrive }])
+  }
+  return (
+    <div>
+      <div className="label mb-1.5">Connections</div>
+      {!legs.length && <p className="mb-2 text-xs t-sub">Changing planes? Add a connection and the details above become the first flight.</p>}
+      <ul className="space-y-2">
+        {legs.map((l, i) => (
+          <li key={l.id} className="space-y-2">
+            <div className="panel space-y-1.5 p-2">
+              <div className="flex items-center gap-1.5">
+                <span className="w-5 text-xs font-semibold t-sub">{i + 1}</span>
+                <input className="input w-16 py-1 font-mono uppercase" placeholder="RDU" maxLength={4} value={l.from} onChange={(e) => upd(l.id, { from: e.target.value.toUpperCase() })} aria-label="From airport" />
+                <span className="t-sub">→</span>
+                <input className="input w-16 py-1 font-mono uppercase" placeholder="JFK" maxLength={4} value={l.to} onChange={(e) => upd(l.id, { to: e.target.value.toUpperCase() })} aria-label="To airport" />
+                <input className="input min-w-0 py-1" placeholder="Flight" value={l.flightNo ?? ''} onChange={(e) => upd(l.id, { flightNo: e.target.value || undefined })} />
+                <button className="btn-ghost px-2" onClick={() => onChange(legs.filter((x) => x.id !== l.id))} aria-label="Remove flight"><X size={16} /></button>
+              </div>
+              {(['depart', 'arrive'] as const).map((end) => {
+                const code = end === 'depart' ? l.from : l.to
+                const t = l[end]
+                const known = airport(code)
+                const put = (p: Partial<FlightLeg['depart']>) => upd(l.id, { [end]: { ...t, ...p } })
+                return (
+                  <div key={end} className="flex flex-wrap items-center gap-1.5">
+                    <span className="w-12 text-xs t-sub">{end === 'depart' ? 'Leaves' : 'Lands'}</span>
+                    <input type="date" className="input w-auto py-1" value={t.day} onChange={(e) => e.target.value && put({ day: e.target.value })} />
+                    <input type="time" className="input w-auto py-1" value={toHHMM(t.time)} onChange={(e) => {
+                      const v = parseHHMM(e.target.value)
+                      if (v != null) put({ time: v })
+                    }} />
+                    {known && !t.tz ? (
+                      <span className="text-xs t-sub">{known.city} time</span>
+                    ) : (
+                      <select className="input w-auto py-1" value={t.tz ?? ''} onChange={(e) => put({ tz: e.target.value || undefined })}>
+                        <option value="">{known ? `${known.city} time` : `${tripTz.split('/')[1]} time`}</option>
+                        {[...new Set([tripTz, ...TZ_CHOICES, ...(t.tz ? [t.tz] : [])])].map((z) => <option key={z} value={z}>{z.split('/')[1]?.replace('_', ' ') ?? z} time</option>)}
+                      </select>
+                    )}
+                  </div>
+                )
+              })}
+              <div className="flex gap-1.5">
+                <input className="input py-1" placeholder="Seat" value={l.seat ?? ''} onChange={(e) => upd(l.id, { seat: e.target.value || undefined })} />
+                <input className="input py-1" placeholder="Confirmation" value={l.confirmation ?? ''} onChange={(e) => upd(l.id, { confirmation: e.target.value || undefined })} />
+              </div>
+            </div>
+            {lays[i] && (
+              <div className="px-2 text-xs" style={lays[i].tight || lays[i].leaveFrom ? { color: '#b45309' } : undefined}>
+                {lays[i].minutes < 0 ? 'The next flight leaves before this one lands' : `${fmtDuration(lays[i].minutes)} layover in ${lays[i].at}${lays[i].overnight ? ' (overnight)' : ''}`}
+              </div>
+            )}
+          </li>
+        ))}
+      </ul>
+      {problems.map((p) => <p key={p.message} className="mt-1 text-xs" style={{ color: '#c8102e' }}>{p.message}</p>)}
+      <button className="btn-soft mt-2 py-1" onClick={add}>
+        <Plus size={14} /> Add a connection
+      </button>
     </div>
   )
 }

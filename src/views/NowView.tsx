@@ -1,7 +1,7 @@
 import { ChevronRight, CircleAlert, Map as MapIcon, Plus, Sunset, Ticket } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Clock, clock, glyphFor, ObjectCard } from '../components/objects'
-import { Horizon, LegPill, LegSheet, MODE_STYLE } from '../components/rail'
+import { Horizon, leaveAt, LegPill, LegSheet, MODE_STYLE } from '../components/rail'
 import { Ribbons } from '../components/ribbons'
 import { RouteCard } from '../components/route'
 import { Weather } from '../components/weather'
@@ -9,13 +9,25 @@ import { cx, Sheet, ViewHeader, Votes } from '../components/ui'
 import { cardKind, det } from '../lib/cards'
 import { daylight, hoursSummary, openStatus } from '../lib/hours'
 import { applyDay, runningLate, type LateResult } from '../lib/reflow'
+import { useFetchRoutes, useRoutes } from '../lib/routeCache'
 import { analyzeDay, anchorOnDay, dayBlocks, interestScore, type Leg, makeCtx } from '../lib/schedule'
 import { dayLabel, fmtDuration, toHHMM, wallToUtc } from '../lib/time'
 import { directionsUrl, distanceMeters, fmtDistance, suggestMode, travelMinutes } from '../lib/transit'
+import { flightStatus, isFlight } from '../lib/flights'
 import { useNow } from '../lib/useNow'
 import { useWeather } from '../lib/weather'
 import { ideas, itemById, useStore } from '../store'
-import type { Block, LatLng } from '../types'
+import type { Block, Item, LatLng } from '../types'
+
+/** "Now · 2h left", or for a flight, which leg you're on or how long the layover has left. */
+function nowEyebrow(item: Item, left: number, utc: number, tz: string): string {
+  if (isFlight(item)) {
+    const st = flightStatus(item.legs, utc, tz)
+    if (st.kind === 'leg') return `Now · ${st.leg.flightNo ? `${st.leg.flightNo} ` : ''}to ${st.leg.to.toUpperCase()} · lands in ${fmtDuration(st.minutesLeft)}`
+    if (st.kind === 'layover') return `Now · layover in ${st.layover.at} · next flight in ${fmtDuration(st.minutesLeft)}`
+  }
+  return `Now · ${fmtDuration(left)} left`
+}
 
 export default function NowView() {
   const trip = useStore((s) => s.trip)
@@ -27,14 +39,16 @@ export default function NowView() {
   const [openLeg, setOpenLeg] = useState<Leg | null>(null)
   const [late, setLate] = useState<number | null>(null)
   const inTrip = now.day >= trip.startDay && now.day <= trip.endDay
-  const ctx = useMemo(() => makeCtx(trip), [trip])
-  const analysis = useMemo(() => analyzeDay(trip, now.day), [trip, now.day])
+  const routes = useRoutes((s) => s.routes)
+  const ctx = useMemo(() => makeCtx(trip, routes), [trip, routes])
+  const analysis = useMemo(() => analyzeDay(trip, now.day, makeCtx(trip, routes)), [trip, routes, now.day])
+  useFetchRoutes(analysis.missing)
   const today = dayBlocks(trip, now.day)
   const current = today.find((b) => b.start <= now.min && b.end > now.min)
   const upcoming = today.filter((b) => b.start > now.min)
   const next = upcoming[0]
   const prevLoc = [...today].reverse().find((b) => b.start <= now.min && ctx.loc(b))
-  const here = (current && ctx.loc(current)) ?? (prevLoc && ctx.loc(prevLoc)) ?? trip.center
+  const here = (current && ctx.loc(current)) ?? (prevLoc && ctx.locEnd(prevLoc)) ?? trip.center
   const legTo = (b?: Block) => (b ? analysis.legs.find((l) => l.toId === b.id && l.minutes > 0) : undefined)
   const open = (b: Block) => {
     setDay(b.day)
@@ -74,9 +88,9 @@ export default function NowView() {
               <RouteCard
                 title={nextItem.title}
                 now={now.min}
-                leave={next.start - (nextLeg?.minutes ?? 0)}
+                leave={nextLeg ? leaveAt(trip, nextLeg) : next.start}
                 arrive={next.start}
-                leg={nextLeg ? `${MODE_STYLE[nextLeg.mode].name} ${nextLeg.minutes} min` : undefined}
+                leg={nextLeg ? `${nextLeg.line ?? MODE_STYLE[nextLeg.mode].name} ${nextLeg.minutes} min` : undefined}
                 color={nextLeg ? MODE_STYLE[nextLeg.mode].c : undefined}
                 directions={nextLoc ? directionsUrl(here, nextLoc, nextLeg?.mode ?? trip.defaultMode, mapsApp) : undefined}
                 onLate={setLate}
@@ -109,7 +123,7 @@ export default function NowView() {
                     block={b}
                     tz={trip.timezone}
                     issues={analysis.issues.get(b.id)}
-                    eyebrow={b === current ? `Now · ${fmtDuration(b.end - now.min)} left` : undefined}
+                    eyebrow={b === current ? nowEyebrow(itemById(trip, b.itemId)!, b.end - now.min, wallToUtc(trip.timezone, now.day, now.min), trip.timezone) : undefined}
                     onClick={() => open(b)}
                   />
                 </div>
@@ -162,10 +176,9 @@ function TransitStub({ legs }: { legs: Leg[] }) {
 /** The leg to the next plan, flagged if it's already time to go. */
 function LateAwareLeg({ leg, now, onOpen }: { leg: Leg; now: number; onOpen: () => void }) {
   const trip = useStore((s) => s.trip)
-  const to = trip.blocks.find((b) => b.id === leg.toId)!
-  const leave = to.start - leg.minutes
+  const leave = leaveAt(trip, leg)
   if (leave > now) return <LegPill trip={trip} leg={leg} onOpen={onOpen} />
-  return <LegPill trip={trip} leg={{ ...leg, tight: true, gap: leg.minutes - (now - leave) }} onOpen={onOpen} />
+  return <LegPill trip={trip} leg={{ ...leg, tight: true }} late={now - leave} onOpen={onOpen} />
 }
 
 function SimControl({ inTrip }: { inTrip: boolean }) {

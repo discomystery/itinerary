@@ -4,10 +4,12 @@ import { createPortal } from 'react-dom'
 import { cardKind, det, fieldsFor, KINDS, ribbonsFor, variantOf } from '../lib/cards'
 import { costOf, currencyOf, fmtMoney, tripCosts } from '../lib/costs'
 import { daylight, hoursSummary } from '../lib/hours'
-import { analyzeDay } from '../lib/schedule'
+import { flightLegLines } from '../lib/ics'
+import { useRoutes } from '../lib/routeCache'
+import { analyzeDay, makeCtx } from '../lib/schedule'
 import { dayLabel, dayRange } from '../lib/time'
 import { type DayWeather, weatherLine } from '../lib/weather'
-import { MODE_STYLE } from './rail'
+import { leaveAt, MODE_STYLE } from './rail'
 import { clock } from './objects'
 import { Sheet } from './ui'
 import type { Trip } from '../types'
@@ -57,6 +59,8 @@ export function PrintButton({ trip, day, weather }: { trip: Trip; day: string; w
 export function Printout({ trip, days, weather }: { trip: Trip; days: string[]; weather: Record<string, DayWeather> }) {
   const cur = currencyOf(trip)
   const costs = tripCosts(trip)
+  const routes = useRoutes((s) => s.routes)
+  const ctx = makeCtx(trip, routes)
   const shown = days.length > 1 ? days.filter((d) => trip.blocks.some((b) => b.day === d) || ribbonsFor(trip, d, clock).length) : days
   return (
     <div className="printout">
@@ -68,7 +72,7 @@ export function Printout({ trip, days, weather }: { trip: Trip; days: string[]; 
         </p>
       </header>
       {shown.map((day) => {
-        const a = analyzeDay(trip, day)
+        const a = analyzeDay(trip, day, ctx)
         const legByTo = new Map(a.legs.map((l) => [l.toId, l]))
         const dl = daylight(day, trip.center.lat, trip.center.lng, trip.timezone)
         const spend = costs.byDay[day]
@@ -102,12 +106,13 @@ export function Printout({ trip, days, weather }: { trip: Trip; days: string[]; 
                     <tr key={b.id}>
                       <td className="tm">
                         {clock(b.start)}–{clock(b.end)}
-                        {leg && leg.minutes > 0 && <small>leave {clock(b.start - leg.minutes)}<br />{MODE_STYLE[leg.mode].name.toLowerCase()} {leg.minutes} min</small>}
+                        {leg && leg.minutes > 0 && <small>leave {clock(leaveAt(trip, leg))}<br />{leg.line ?? MODE_STYLE[leg.mode].name.toLowerCase()} {leg.minutes} min</small>}
                       </td>
                       <td>
                         <b>{item.title}</b>
                         <span className="kd">{KINDS[k].label}{b.locked && ' · fixed time'}</span>
                         {item.address && <div>{item.address}</div>}
+                        {flightLegLines(item).map((l, n) => <div key={`leg${n}`}>{l}</div>)}
                         {fields.length > 0 && <div>{fields.map(([l, v]) => `${l}: ${v}`).join(' · ')}</div>}
                         {(hours || cost) && <div className="sm">{[hours && `Open ${hours}`, cost && `${fmtMoney(cost.each, cur)} each`].filter(Boolean).join(' · ')}</div>}
                         {item.notes && <div className="sm nt">{item.notes}</div>}
