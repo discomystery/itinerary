@@ -1,12 +1,13 @@
 import { CalendarDays, Lightbulb, type LucideIcon, Map as MapIcon, Timer, Undo2, Users } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Avatar, cx, Mark } from './components/ui'
-import { DetailPane, PlanAside, Sidebar, TopTabs, UndoButton, WhoAmI } from './components/hub'
+import { DetailPane, picked, TopTabs, UndoButton, WhoAmI } from './components/hub'
 import ItemEditor from './components/ItemEditor'
 import { type Tab, useStore } from './store'
 import { importFromHash } from './lib/share'
 import { useInboxLookups } from './lib/useInboxLookups'
 import { useLayout } from './lib/useLayout'
+import BoardView from './views/BoardView'
 import IdeasView from './views/IdeasView'
 import MapView from './views/MapView'
 import NowView from './views/NowView'
@@ -22,7 +23,7 @@ const TABS: { id: Tab; Icon: LucideIcon; label: string }[] = [
 ]
 
 export default function App() {
-  const { tab, setTab, trip, viewer, setViewer, history: past, undo, editing, edit } = useStore()
+  const { tab, setTab, trip, viewer, setViewer, history: past, undo, editing, edit, selected } = useStore()
   const [shareMsg, setShareMsg] = useState<string | null>(null)
   const main = useRef<HTMLElement>(null)
   const layout = useLayout()
@@ -51,35 +52,32 @@ export default function App() {
   )
 
   if (layout !== 'phone') {
-    // Plan sits beside the picked plan's details (and, on desk, the ideas pool); Ideas sits beside the map on desk.
-    const mapPane = () => (
-      <section className="pane aside" aria-label="Map">
-        <div className="ab overflow-hidden"><MapView embedded defaultShow="all" /></div>
-      </section>
-    )
-    const aside = tab === 'plan'
-      ? layout === 'desk' ? <PlanAside /> : <section className="pane aside" aria-label="Details"><div className="ab overflow-y-auto"><DetailPane /></div></section>
-      : tab === 'ideas' && layout === 'desk' ? mapPane() : null
+    // Plan is the board, with the picked card unfolded beside it (docked on desk, over the board on tablet).
+    // Ideas sits beside a map of everything on desk.
+    const aside = tab === 'plan' && picked(trip, selected)
+      ? <section className={cx('pane aside detailp', layout === 'tablet' && 'over')} aria-label="Details"><div className="ab overflow-y-auto"><DetailPane /></div></section>
+      : tab === 'ideas' && layout === 'desk'
+        ? <section className="pane aside" aria-label="Map"><div className="ab overflow-hidden"><MapView embedded defaultShow="all" /></div></section>
+        : null
     return (
       <div className={cx('hub', `l-${layout}`)}>
-        {layout === 'desk' ? (
-          <Sidebar tabs={TABS} />
-        ) : (
-          <header className="topbar chrome">
-            <div className="min-w-0 flex-1" title={trip.name}><Mark /></div>
-            <TopTabs tabs={TABS} />
-            <div className="flex flex-1 items-center justify-end gap-2">
-              <UndoButton />
-              <WhoAmI />
-            </div>
-          </header>
-        )}
+        <header className="topbar chrome">
+          <div className="flex min-w-0 flex-1 items-center gap-3" title={trip.name}>
+            <Mark />
+            {layout === 'desk' && <b className="truncate text-[15px]">{trip.name}</b>}
+          </div>
+          <TopTabs tabs={TABS} />
+          <div className="flex flex-1 items-center justify-end gap-2">
+            <UndoButton />
+            <WhoAmI />
+          </div>
+        </header>
         <div className="panes">
-          <main ref={main} className={cx('pane', tab === 'map' ? 'overflow-hidden' : 'overflow-y-auto')}>
+          <main ref={main} className={cx('pane', tab === 'map' || tab === 'plan' ? 'overflow-hidden' : 'overflow-y-auto')}>
             {toast}
             {tab === 'now' && <NowView />}
-            {tab === 'plan' && <PlanView hideDays={layout === 'desk'} inspector />}
-            {tab === 'map' && <MapView embedded={layout === 'desk'} />}
+            {tab === 'plan' && <BoardView />}
+            {tab === 'map' && <MapView />}
             {tab === 'ideas' && <IdeasView />}
             {tab === 'trip' && <TripView />}
           </main>

@@ -18,11 +18,7 @@ const GUTTER = 42
 
 type Mode = 'list' | 'day'
 
-/**
- * `hideDays` drops the day strip where a sidebar already lists the days.
- * `inspector`: a details pane sits beside the plan, so tapping a plan shows it there instead of unfolding it.
- */
-export default function PlanView({ hideDays = false, inspector = false }: { hideDays?: boolean; inspector?: boolean }) {
+export default function PlanView() {
   const trip = useStore((s) => s.trip)
   const day = useStore((s) => s.day)
   const setDay = useStore((s) => s.setDay)
@@ -36,8 +32,6 @@ export default function PlanView({ hideDays = false, inspector = false }: { hide
   // Fetch the whole trip's legs, so issue dots on other days are real too.
   useFetchRoutes(Object.values(analyses).flatMap((a) => a.missing))
   const now = useNow()
-  const select = useStore((s) => s.select)
-  const shown = useShownBlock(analysis)
   const [mode, setMode] = useState<Mode>(() => {
     try {
       return (localStorage.getItem('plan-mode') as Mode) || 'list'
@@ -62,7 +56,7 @@ export default function PlanView({ hideDays = false, inspector = false }: { hide
   return (
     <div>
       <ViewHeader
-        top={!hideDays && <DayStrip days={days} day={day} setDay={setDay} analyses={analyses} />}
+        top={<DayStrip days={days} day={day} setDay={setDay} analyses={analyses} />}
         title={dayLabel(day).replace(',', '')}
         right={
           <>
@@ -84,16 +78,16 @@ export default function PlanView({ hideDays = false, inspector = false }: { hide
             trip={trip}
             day={day}
             analysis={analysis}
-            unfolded={inspector ? null : unfolded}
-            selected={inspector ? shown : null}
-            onToggle={(id) => (inspector ? select(id) : setUnfolded(unfolded === id ? null : id))}
+            unfolded={unfolded}
+            selected={null}
+            onToggle={(id) => setUnfolded(unfolded === id ? null : id)}
             onEdit={setOpenBlock}
             onMore={setMore}
             onLeg={setOpenLeg}
             onAdd={() => setAddAt(-1)}
           />
         ) : (
-          <DayView trip={trip} day={day} analysis={analysis} onEmpty={setAddAt} onOpen={inspector ? select : setOpenBlock} onLeg={setOpenLeg} />
+          <DayView trip={trip} day={day} analysis={analysis} onEmpty={setAddAt} onOpen={setOpenBlock} onLeg={setOpenLeg} />
         )}
       </div>
 
@@ -103,12 +97,6 @@ export default function PlanView({ hideDays = false, inspector = false }: { hide
       {openLeg && <LegSheet leg={openLeg} onClose={() => setOpenLeg(null)} />}
     </div>
   )
-}
-
-/** The plan the details pane shows: the one picked, or the day's first when the pick is on another day. */
-export function useShownBlock(analysis: DayAnalysis): string | null {
-  const selected = useStore((s) => s.selected)
-  return analysis.blocks.find((b) => b.id === selected)?.id ?? analysis.blocks[0]?.id ?? null
 }
 
 function DayStrip({ days, day, setDay, analyses }: {
@@ -140,7 +128,7 @@ function DayStrip({ days, day, setDay, analyses }: {
 
 type Row = { key: string; t: number; node: ReactNode; mode?: TransitMode; isLeg?: boolean }
 
-function ListView({ trip, day, analysis, unfolded, selected, onToggle, onEdit, onMore, onLeg, onAdd }: {
+export function ListView({ trip, day, analysis, unfolded, selected, onToggle, onEdit, onMore, onLeg, onAdd }: {
   trip: Trip
   day: string
   analysis: DayAnalysis
@@ -233,7 +221,7 @@ function ListView({ trip, day, analysis, unfolded, selected, onToggle, onEdit, o
 /* ------------------------------ Day view ------------------------------- */
 
 /** Greedy column layout so overlapping blocks (e.g. a group split) sit side by side. */
-function columns(blocks: Block[]): Map<string, { col: number; cols: number }> {
+export function columns(blocks: Block[]): Map<string, { col: number; cols: number }> {
   const out = new Map<string, { col: number; cols: number }>()
   let cluster: Block[] = []
   let clusterEnd = -Infinity
@@ -426,7 +414,7 @@ function DayView({ trip, day, analysis, onEmpty, onOpen, onLeg }: {
 
 /* ------------------------------- Sheets -------------------------------- */
 
-function AddSheet({ trip, day, at, onClose }: { trip: Trip; day: string; at: number | null; onClose: () => void }) {
+export function AddSheet({ trip, day, at, onClose }: { trip: Trip; day: string; at: number | null; onClose: () => void }) {
   const addBlock = useStore((s) => s.addBlock)
   const edit = useStore((s) => s.edit)
   const addItem = useStore((s) => s.addItem)

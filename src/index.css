@@ -658,73 +658,80 @@ button.o:active { transform: scale(0.99); }
 .menu button.danger, .menu button.danger svg { color: #c8102e; }
 
 /* ===== Tablet and desktop: the planning hub =====
-   Phone views placed side by side. Tablet (iPad portrait, iPad mini included) gets an iPadOS-style
-   tab bar on top and the day's plan beside its map. Desk (desktop and iPad landscape) gets a sidebar
-   with every day, the plan in the middle, and a Map or Ideas pane on the right. */
+   An iPadOS-style tab bar on top. Plan is a board of every day (or a week grid), with the
+   picked card unfolded in a details pane: docked on desk, over the board on tablet. */
 .hub { height: 100%; display: flex; flex-direction: column; }
-.hub.l-desk { flex-direction: row; }
-.hub .panes { flex: 1; min-width: 0; min-height: 0; display: flex; }
+.hub .panes { position: relative; flex: 1; min-width: 0; min-height: 0; display: flex; }
 .hub .pane { min-width: 0; min-height: 0; height: 100%; }
 .hub .panes > main { flex: 1; }
-.hub .aside { flex: none; width: 42%; display: flex; flex-direction: column; background: var(--chrome); box-shadow: inset 1px 0 0 var(--line); }
-.hub.l-desk .aside { width: clamp(360px, 34vw, 520px); }
+.hub .aside { flex: none; width: clamp(360px, 34vw, 520px); display: flex; flex-direction: column; background: var(--chrome); box-shadow: inset 1px 0 0 var(--line); }
 .hub .aside .ab { flex: 1; min-height: 0; position: relative; }
-.hub .aside .ash { flex: none; display: flex; justify-content: center; padding: 8px 16px; }
+.hub .aside.detailp { width: clamp(380px, 32vw, 480px); }
+.hub .aside.over { position: absolute; right: 0; top: 0; bottom: 0; z-index: 40; width: min(420px, 62%); box-shadow: -1px 0 0 var(--line), -24px 0 48px -24px rgb(20 26 34 / 0.45); }
 /* Roomier margins, and content held to a readable width on wide screens. */
 .hub main .vh, .hub main .desk { padding-inline: max(24px, calc((100% - 720px) / 2)); }
-.hub .aside .vh, .hub .aside .desk { padding-inline: 16px; }
-.hub.l-desk .vh { padding-top: 16px; }
-.hub .aside .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-/* One filled button per screen: the plan's add button keeps it, so the ideas pane's goes soft. */
-.hub .aside .b2.pri { background: var(--chrome); color: var(--act); box-shadow: inset 0 0 0 1px var(--line); }
+.hub main .vh { padding-top: 16px; }
 
 .topbar { flex: none; display: flex; align-items: center; gap: 12px; padding: max(8px, env(safe-area-inset-top)) 24px 8px; }
 .toptabs { display: inline-flex; gap: 2px; padding: 3px; border-radius: 999px; background: color-mix(in srgb, var(--sub) 14%, transparent); }
 .toptabs button { height: 34px; padding: 0 16px; border-radius: 999px; font: 600 14px/1 var(--sans); color: var(--sub); background: none; border: 0; cursor: pointer; }
 .toptabs button[aria-current='page'] { background: var(--chrome); color: var(--ink); box-shadow: 0 1px 3px rgb(0 0 0 / 0.14); }
 
-.side { flex: none; width: 248px; display: flex; flex-direction: column; gap: 16px; padding: max(16px, env(safe-area-inset-top)) 12px max(12px, env(safe-area-inset-bottom)); overflow: hidden; background: color-mix(in srgb, var(--desk) 45%, var(--chrome)); box-shadow: inset -1px 0 0 var(--line); }
-@media (max-width: 1179px) { .side { width: 224px; } }
-.side .sh { display: flex; flex-direction: column; gap: 4px; padding: 0 8px; }
-.side .sh b { margin-top: 8px; font-size: 17px; font-weight: 700; letter-spacing: -0.01em; line-height: 1.2; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.side .sh small { font-size: 12.5px; color: var(--sub); }
-.snav { display: flex; flex-direction: column; gap: 2px; }
-.snav button, .sdays button { display: flex; align-items: center; gap: 12px; border-radius: 8px; color: var(--ink); background: none; border: 0; cursor: pointer; text-align: left; }
-.snav button { height: 36px; padding: 0 8px; font: 500 14px/1 var(--sans); }
-.snav svg { width: 18px; height: 18px; color: var(--act); }
-.snav button[aria-current='page'], .sdays button[aria-pressed='true'] { background: color-mix(in srgb, var(--act) 14%, transparent); }
-.snav button[aria-current='page'] { font-weight: 600; }
-@media (hover: hover) { .snav button:not([aria-current]):hover, .sdays button[aria-pressed='false']:hover { background: color-mix(in srgb, var(--sub) 10%, transparent); } }
-.side .sdl { margin: 0; padding: 0 8px; }
-.sdays { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; margin: -8px -4px 0; padding: 0 4px; }
-.sdays button { padding: 8px; }
-.sdays .dn { flex: none; width: 32px; display: flex; flex-direction: column; align-items: center; gap: 4px; }
-.sdays .dn small { font: 600 10px/1 var(--mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--sub); }
-.sdays .dn b { font: 600 17px/1 var(--sans); }
-.sdays .x { flex: 1; min-width: 0; }
-.sdays .x b, .sdays .x small { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.sdays .x b { font-size: 13px; font-weight: 600; }
-.sdays .free .x b { font-weight: 500; color: var(--sub); }
-.sdays .x small { margin-top: 4px; font: 500 10.5px/1.2 var(--mono); color: var(--sub); }
-.sdays .dot { flex: none; width: 7px; height: 7px; border-radius: 50%; }
-.sdays .dot.hard { background: var(--hard); }
-.side .sf { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 4px; }
-
-/* Details pane: the picked plan in full, with its actions pinned below. */
+/* Board: the ideas pool, then a column of paper cards per day; free days fold to strips. */
+.hub main .bview .vh { padding-inline: 24px; }
+.board { flex: 1; min-height: 0; display: flex; align-items: stretch; gap: 16px; padding: 16px 24px 24px; overflow-x: auto; scroll-padding-inline: 24px; }
+.bcol { flex: none; width: 320px; min-height: 0; display: flex; flex-direction: column; border-radius: 14px; transition: background 0.15s; }
+.bcol.over, .bstrip.over { background: color-mix(in srgb, var(--act) 10%, transparent); box-shadow: inset 0 0 0 2px var(--act); }
+.bcol.pool { width: 288px; background: color-mix(in srgb, var(--sub) 9%, transparent); }
+.bcol .bh { flex: none; display: flex; align-items: center; gap: 8px; padding: 8px 8px 8px 12px; }
+.bcol .bt { flex: 1; min-width: 0; display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 8px; text-align: left; background: none; border: 0; padding: 0; color: var(--ink); cursor: pointer; }
+.bcol .bt b { font-size: 17px; font-weight: 700; letter-spacing: -0.01em; }
+.bcol .bt small { font: 500 10.5px/1.2 var(--mono); color: var(--sub); }
+.bcol .bt .dot { width: 7px; height: 7px; border-radius: 50%; align-self: center; }
+.bcol.cur .bt b { color: var(--act); }
+.bcol .bb { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding: 4px 8px 16px; }
+.bstrip { flex: none; width: 56px; display: flex; flex-direction: column; align-items: center; gap: 4px; padding-top: 16px; border-radius: 14px; border: 1.5px dashed color-mix(in srgb, var(--sub) 40%, transparent); background: none; color: var(--sub); cursor: pointer; }
+.bstrip small { font: 600 10px/1 var(--mono); letter-spacing: 0.08em; text-transform: uppercase; }
+.bstrip b { font: 600 17px/1 var(--sans); color: var(--ink); }
+.bstrip span { margin-top: 12px; writing-mode: vertical-rl; font: 600 10px/1 var(--mono); letter-spacing: 0.1em; text-transform: uppercase; }
+@media (hover: hover) { .bstrip:hover { border-color: var(--act); color: var(--act); } }
 .pick { border-radius: calc(var(--r) + 3px); }
 .pick.sel { outline: 2px solid var(--act); outline-offset: 3px; }
+.pick[draggable='true'] { cursor: grab; }
+
+/* Week: the same plans on a time grid, one column per day. */
+.week { flex: 1; min-height: 0; overflow: auto; padding: 0 24px 24px; }
+.week .wh, .week .wb { display: grid; grid-template-columns: 44px repeat(var(--days, 7), minmax(120px, 1fr)); }
+.week .wh { position: sticky; top: 0; z-index: 25; background: var(--grain), var(--desk); padding: 12px 0 8px; }
+.week .wh span { display: flex; align-items: baseline; justify-content: center; gap: 6px; }
+.week .wh small { font: 600 10px/1 var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--sub); }
+.week .wh b { font: 600 17px/1 var(--sans); }
+.week .wh .cur b, .week .wh .cur small { color: var(--act); }
+.week .wb { position: relative; }
+.week .wg { position: relative; }
+.week .wg span { position: absolute; right: 6px; transform: translateY(-6px); font: 500 10px/1 var(--sans); color: var(--sub); }
+.week .wc { border-left: 1px solid var(--line); background: color-mix(in srgb, var(--chrome) 55%, transparent); cursor: copy; }
+.week .wc.cur { background: color-mix(in srgb, var(--act) 5%, var(--chrome)); }
+.week .wc.over { box-shadow: inset 0 0 0 2px var(--act); }
+.week .ce { border: 0; display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start; }
+.week .ce.sel { box-shadow: 0 0 0 2px var(--act), var(--lift); z-index: 10; }
+
+/* Details pane: the picked card unfolded, big, on its own bit of desk. Actions pinned below. */
 .detail { min-height: 100%; display: flex; flex-direction: column; }
-.detail .dh { padding: 16px; display: flex; flex-direction: column; gap: 4px; }
-.detail .dh b { font-size: 20px; font-weight: 700; letter-spacing: -0.01em; line-height: 1.2; }
-.detail .dh small { font-size: 12.5px; color: var(--sub); }
+.detail .dh { display: flex; align-items: center; gap: 12px; padding: 12px 16px; }
+.detail .dh .x { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.detail .dh b { font-size: 15px; font-weight: 600; }
+.detail .dh small { font: 500 11px/1.3 var(--mono); color: var(--sub); }
 .detail .db { flex: 1; display: flex; flex-direction: column; }
-.detail .db .sheetdesk { flex: 1; margin: 0; padding: 16px; gap: 12px; }
+.detail .db .sheetdesk { flex: 1; margin: 0; padding: 24px 20px; gap: 16px; }
+.detail .db .sheetdesk > .o:first-child { --lift: 0 1px 0 rgb(0 0 0 / 0.06), 0 22px 36px -18px rgb(20 26 34 / 0.55), 0 4px 10px -6px rgb(20 26 34 / 0.25); transform: rotate(-0.4deg); }
+.l-desk .detail .db .sheetdesk > .o:first-child { zoom: 1.08; }
 .detail .df { position: sticky; bottom: 0; display: flex; gap: 8px; padding: 12px 16px max(12px, env(safe-area-inset-bottom)); background: var(--chrome); border-top: 1px solid var(--line); }
 .detail .df > * { min-width: 0; white-space: nowrap; padding-inline: 8px; }
 .detail .df svg { flex: none; }
 /* The narrow tablet pane keeps Directions to its icon. */
 .l-tablet .detail .df .dir { flex: none; width: 40px; padding: 0; }
 .l-tablet .detail .df .dir span { display: none; }
-.dempty { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 32px 24px; text-align: center; background: var(--grain), var(--desk); }
-.dempty b { font-size: 15px; font-weight: 600; }
-.dempty small { font-size: 13px; color: var(--sub); }
+/* iPad portrait (iPad mini included): narrower columns so the pool, the free days and today all fit. */
+.l-tablet .bcol { width: 296px; }
+.l-tablet .bcol.pool { width: 240px; }
