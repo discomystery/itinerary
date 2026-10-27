@@ -4,6 +4,7 @@ import { Clock, clock, glyphFor, ObjectCard } from '../components/objects'
 import { Horizon, LegPill, LegSheet, MODE_STYLE } from '../components/rail'
 import { Ribbons } from '../components/ribbons'
 import { RouteCard } from '../components/route'
+import { Weather } from '../components/weather'
 import { cx, Sheet, ViewHeader, Votes } from '../components/ui'
 import { cardKind, det } from '../lib/cards'
 import { daylight, hoursSummary, openStatus } from '../lib/hours'
@@ -12,6 +13,7 @@ import { analyzeDay, anchorOnDay, dayBlocks, interestScore, type Leg, makeCtx } 
 import { dayLabel, fmtDuration, toHHMM, wallToUtc } from '../lib/time'
 import { directionsUrl, distanceMeters, fmtDistance, suggestMode, travelMinutes } from '../lib/transit'
 import { useNow } from '../lib/useNow'
+import { useWeather } from '../lib/weather'
 import { ideas, itemById, useStore } from '../store'
 import type { Block, LatLng } from '../types'
 
@@ -21,6 +23,7 @@ export default function NowView() {
   const setDay = useStore((s) => s.setDay)
   const mapsApp = useStore((s) => s.mapsApp)
   const now = useNow()
+  const weather = useWeather(trip)
   const [openLeg, setOpenLeg] = useState<Leg | null>(null)
   const [late, setLate] = useState<number | null>(null)
   const inTrip = now.day >= trip.startDay && now.day <= trip.endDay
@@ -56,7 +59,7 @@ export default function NowView() {
     <div>
       <ViewHeader
         title="Now"
-        sub={<>{dayLabel(now.day, 'long').split(',')[0]} · {clock(now.min)} {city} time{now.simulated && <b style={{ color: '#7c5cd6' }}> · pretend</b>}</>}
+        sub={<>{dayLabel(now.day, 'long').split(',')[0]} · {clock(now.min)} {city} time{now.simulated && <b style={{ color: '#7c5cd6' }}> · pretend</b>}{inTrip && weather[now.day] && <> · <Weather w={weather[now.day]} /></>}</>}
         right={<button className="ib" onClick={() => setTab('map')} aria-label="Map"><MapIcon /></button>}
       >
         {inTrip && <Horizon trip={trip} day={now.day} now={now.min} />}

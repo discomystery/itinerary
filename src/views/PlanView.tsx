@@ -3,12 +3,14 @@ import { Fragment, type ReactNode, useMemo, useRef, useState } from 'react'
 import { clock, glyphFor, objectKind, ObjectCard } from '../components/objects'
 import { Horizon, LegPill, LegSheet, leaveAt, MODE_STYLE, RailGap, RailMark, railVars } from '../components/rail'
 import { Ribbons } from '../components/ribbons'
+import { Weather } from '../components/weather'
 import { cx, IssueList, Sheet, ViewHeader, Votes } from '../components/ui'
 import { daylight, hoursSummary, openSpans, openStatus } from '../lib/hours'
 import { type DayAnalysis, type Leg, analyzeDay, anchorOnDay, anchoredSlot, findSlot, interestScore, makeCtx, worstSeverity } from '../lib/schedule'
 import { dayLabel, dayRange, fmtDuration, parseHHMM, snap, toHHMM } from '../lib/time'
 import { directionsUrl } from '../lib/transit'
 import { useNow } from '../lib/useNow'
+import { useWeather } from '../lib/weather'
 import { ideas, itemById, useStore } from '../store'
 import type { Block, Item, TransitMode, Trip } from '../types'
 
@@ -25,6 +27,7 @@ export default function PlanView() {
   const analyses = useMemo(() => Object.fromEntries(days.map((d) => [d, analyzeDay(trip, d)])), [trip, days.join()])
   const analysis = analyses[day] ?? analyzeDay(trip, day)
   const now = useNow()
+  const weather = useWeather(trip)
   const [mode, setMode] = useState<Mode>(() => {
     try {
       return (localStorage.getItem('plan-mode') as Mode) || 'list'
@@ -51,6 +54,7 @@ export default function PlanView() {
       <ViewHeader
         top={<DayStrip days={days} day={day} setDay={setDay} analyses={analyses} />}
         title={dayLabel(day).replace(',', '')}
+        sub={weather[day] && <Weather w={weather[day]} />}
         right={
           <>
             <span className="seg3">
