@@ -1,3 +1,4 @@
+import { CalendarDays, Lightbulb, type LucideIcon, Map as MapIcon, Timer, Undo2, Users } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Avatar, cx } from './components/ui'
 import ItemEditor from './components/ItemEditor'
@@ -9,12 +10,12 @@ import NowView from './views/NowView'
 import PlanView from './views/PlanView'
 import TripView from './views/TripView'
 
-const TABS: { id: Tab; icon: string; label: string }[] = [
-  { id: 'now', icon: '⏱️', label: 'Now' },
-  { id: 'plan', icon: '🗓️', label: 'Plan' },
-  { id: 'map', icon: '🗺️', label: 'Map' },
-  { id: 'ideas', icon: '💡', label: 'Ideas' },
-  { id: 'trip', icon: '👥', label: 'Trip' },
+const TABS: { id: Tab; Icon: LucideIcon; label: string }[] = [
+  { id: 'now', Icon: Timer, label: 'Now' },
+  { id: 'plan', Icon: CalendarDays, label: 'Plan' },
+  { id: 'map', Icon: MapIcon, label: 'Map' },
+  { id: 'ideas', Icon: Lightbulb, label: 'Ideas' },
+  { id: 'trip', Icon: Users, label: 'Trip' },
 ]
 
 export default function App() {
@@ -37,18 +38,15 @@ export default function App() {
 
   return (
     <div className="mx-auto flex h-full max-w-3xl flex-col">
-      <header className="flex items-center gap-2 border-b border-slate-200 bg-white px-3 py-2 pt-[max(0.5rem,env(safe-area-inset-top))]">
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-sm font-semibold">{trip.name}</div>
-        </div>
-        <button className="btn-ghost px-2" disabled={!past.length} onClick={undo} title="Undo">
-          ↶ <span className="hidden sm:inline">Undo</span>
+      <header className="chrome flex items-center gap-2 px-3 pb-1 pt-[max(0.5rem,env(safe-area-inset-top))]">
+        <div className="min-w-0 flex-1 truncate font-mono text-[11px] font-semibold uppercase tracking-[.06em] t-sub">{trip.name}</div>
+        <button className="btn-ghost h-8 px-2" disabled={!past.length} onClick={undo} title="Undo" aria-label="Undo">
+          <Undo2 size={17} />
         </button>
         {me && (
-          <label className="flex items-center gap-1.5 rounded-full bg-slate-100 py-1 pl-1 pr-2 text-xs" title="Votes are cast as this person">
+          <label className="flex items-center gap-1.5 rounded-full py-1 pl-1 pr-2 text-xs" style={{ boxShadow: 'inset 0 0 0 1px var(--line)' }} title="Votes are cast as this person">
             <Avatar person={me} size={22} />
-            <span className="hidden text-slate-500 sm:inline">as</span>
-            <select className="bg-transparent font-medium outline-none" value={me.id} onChange={(e) => setViewer(e.target.value)}>
+            <select className="bg-transparent font-medium outline-none" value={me.id} onChange={(e) => setViewer(e.target.value)} aria-label="Voting as">
               {trip.people.map((p) => (
                 <option key={p.id} value={p.id}>{p.name}</option>
               ))}
@@ -58,7 +56,7 @@ export default function App() {
       </header>
 
       {shareMsg && (
-        <div className="bg-emerald-50 px-3 py-2 text-sm text-emerald-800" onClick={() => setShareMsg(null)}>{shareMsg}</div>
+        <button className="chrome px-3 py-2 text-left text-sm" style={{ color: '#15803d' }} onClick={() => setShareMsg(null)}>{shareMsg}</button>
       )}
 
       <main className={cx('min-h-0 flex-1', tab === 'map' ? 'overflow-hidden' : 'overflow-y-auto')}>
@@ -69,14 +67,16 @@ export default function App() {
         {tab === 'trip' && <TripView />}
       </main>
 
-      <nav className="grid grid-cols-5 border-t border-slate-200 bg-white pb-[env(safe-area-inset-bottom)]">
+      <nav className="chrome grid grid-cols-5 border-t b-line pb-[env(safe-area-inset-bottom)]">
         {TABS.map((t) => (
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
-            className={cx('flex flex-col items-center gap-0.5 py-2 text-[11px]', tab === t.id ? 'font-semibold text-slate-900' : 'text-slate-500')}
+            aria-current={tab === t.id ? 'page' : undefined}
+            className="flex flex-col items-center gap-0.5 pb-1.5 pt-2 text-[10px] font-medium"
+            style={{ color: tab === t.id ? 'var(--act)' : 'var(--sub)' }}
           >
-            <span className={cx('text-lg leading-none', tab !== t.id && 'opacity-60 grayscale')}>{t.icon}</span>
+            <t.Icon size={22} strokeWidth={tab === t.id ? 2.2 : 1.8} />
             {t.label}
           </button>
         ))}

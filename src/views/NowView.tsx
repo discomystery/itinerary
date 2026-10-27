@@ -1,25 +1,39 @@
+import { ChevronRight, CircleAlert, Lock, Plus } from 'lucide-react'
 import { useMemo, useState } from 'react'
-import { cx, InterestDots, SEVERITY_STYLE, TYPE_META } from '../components/ui'
+import { clock, glyphFor, ObjectCard } from '../components/objects'
+import { Horizon, LegPill, LegSheet } from '../components/rail'
+import { cx, Votes } from '../components/ui'
 import { hoursSummary, openStatus } from '../lib/hours'
 import { applyDay, runningLate, type LateResult } from '../lib/reflow'
-import { anchorOnDay, dayBlocks, interestScore, makeCtx } from '../lib/schedule'
-import { dayLabel, fmtDuration, fmtTime, toHHMM, wallToUtc } from '../lib/time'
-import { directionsUrl, distanceMeters, fmtDistance, MODE_ICON, suggestMode, travelMinutes } from '../lib/transit'
+import { analyzeDay, anchorOnDay, dayBlocks, interestScore, type Leg, makeCtx } from '../lib/schedule'
+import { dayLabel, fmtDuration, toHHMM, wallToUtc } from '../lib/time'
+import { distanceMeters, fmtDistance, suggestMode, travelMinutes } from '../lib/transit'
+import { MODE_STYLE } from '../components/rail'
 import { useNow } from '../lib/useNow'
 import { itemById, useStore } from '../store'
 import type { Block, LatLng } from '../types'
 
 export default function NowView() {
   const trip = useStore((s) => s.trip)
+  const setTab = useStore((s) => s.setTab)
+  const setDay = useStore((s) => s.setDay)
   const now = useNow()
+  const [openLeg, setOpenLeg] = useState<Leg | null>(null)
   const inTrip = now.day >= trip.startDay && now.day <= trip.endDay
   const ctx = useMemo(() => makeCtx(trip), [trip])
+  const analysis = useMemo(() => analyzeDay(trip, now.day), [trip, now.day])
   const today = dayBlocks(trip, now.day)
   const current = today.find((b) => b.start <= now.min && b.end > now.min)
   const upcoming = today.filter((b) => b.start > now.min)
   const next = upcoming[0]
+  const after = upcoming[1]
   const prevLoc = [...today].reverse().find((b) => b.start <= now.min && ctx.loc(b))
   const here = (current && ctx.loc(current)) ?? (prevLoc && ctx.loc(prevLoc)) ?? trip.center
+  const legTo = (b?: Block) => (b ? analysis.legs.find((l) => l.toId === b.id && l.minutes > 0) : undefined)
+  const open = (b: Block) => {
+    setDay(b.day)
+    setTab('plan')
+  }
 
   // Next hard moment today (e.g. puck drop).
   const hard = today
@@ -27,32 +41,75 @@ export default function NowView() {
     .filter((x) => x.t > now.min)
     .sort((x, y) => x.t - y.t)[0]
 
+  const nextLeg = legTo(next)
+  const afterLeg = legTo(after)
+
   return (
-    <div className="space-y-3 p-3">
+    <div className="flex flex-col gap-2 px-3 pb-8 pt-3">
       <SimControl inTrip={inTrip} />
 
       {inTrip && (
         <>
-          {current && <NowCard label="Now" block={current} now={now.min} />}
-          {next && <NextCard block={next} from={current ?? prevLoc} now={now.min} />}
-          {!current && !next && (
-            <div className="card p-4 text-sm text-slate-600">Nothing else on the plan today. Here's what's open nearby 👇</div>
-          )}
+          <div className="panel px-4">
+            <Horizon trip={trip} day={now.day} now={now.min} />
+          </div>
           {hard && (
-            <div className="card flex items-center gap-3 border-rose-200 bg-rose-50 p-3">
-              <span className="text-2xl">🔒</span>
-              <div className="flex-1 text-sm">
-                <div className="font-semibold">{hard.a.label}: {itemById(trip, hard.b.itemId)!.title}</div>
-                <div className="text-rose-800">at {fmtTime(hard.t)}, in {fmtDuration(hard.t - now.min)}</div>
+            <div className="flex items-center gap-3 rounded-[10px] px-3.5 py-2.5 text-white" style={{ background: '#14243b' }}>
+              <Lock size={16} color="#ff7b8a" />
+              <div className="min-w-0 flex-1">
+                <div className="font-mono text-[9.5px] font-semibold uppercase tracking-[.08em]" style={{ color: '#9fb4d4' }}>Next fixed time</div>
+                <div className="truncate text-[13px]">{hard.a.label} · {itemById(trip, hard.b.itemId)!.title}</div>
+              </div>
+              <div className="text-right">
+                <div className="text-[22px] font-extrabold leading-none" style={{ color: "#ff7b8a", fontFamily: "var(--cond)" }}>{clock(hard.t)}</div>
+                <div className="font-mono text-[10px]" style={{ color: '#9fb4d4' }}>in {fmtDuration(hard.t - now.min)}</div>
               </div>
             </div>
           )}
+
+          {current && (
+            <ObjectCard
+              item={itemById(trip, current.itemId)!}
+              block={current}
+              tz={trip.timezone}
+              issues={analysis.issues.get(current.id)}
+              eyebrow={`Now · ${fmtDuration(current.end - now.min)} left`}
+              onClick={() => open(current)}
+            />
+          )}
+          {next && nextLeg && <LateAwareLeg leg={nextLeg} now={now.min} onOpen={() => setOpenLeg(nextLeg)} />}
+          {next && (
+            <ObjectCard
+              item={itemById(trip, next.itemId)!}
+              block={next}
+              tz={trip.timezone}
+              issues={analysis.issues.get(next.id)}
+              eyebrow={`Next · in ${fmtDuration(next.start - now.min)}`}
+              onClick={() => open(next)}
+            />
+          )}
+          {after && afterLeg && <LegPill trip={trip} leg={afterLeg} onOpen={() => setOpenLeg(afterLeg)} />}
+          {after && (
+            <ObjectCard item={itemById(trip, after.itemId)!} block={after} tz={trip.timezone} issues={analysis.issues.get(after.id)} onClick={() => open(after)} />
+          )}
+          {!current && !next && <div className="panel text-sm t-sub">Nothing else on the plan today. Here's what's open nearby.</div>}
+
           {(current || next) && <RunningLate day={now.day} now={now.min} />}
           <OpenNearby here={here} day={now.day} now={now.min} />
         </>
       )}
+      {openLeg && <LegSheet leg={openLeg} onClose={() => setOpenLeg(null)} />}
     </div>
   )
+}
+
+/** The leg to the next plan, flagged if it's already time to go. */
+function LateAwareLeg({ leg, now, onOpen }: { leg: Leg; now: number; onOpen: () => void }) {
+  const trip = useStore((s) => s.trip)
+  const to = trip.blocks.find((b) => b.id === leg.toId)!
+  const leave = to.start - leg.minutes
+  if (leave > now) return <LegPill trip={trip} leg={leg} onOpen={onOpen} />
+  return <LegPill trip={trip} leg={{ ...leg, tight: true, gap: leg.minutes - (now - leave) }} onOpen={onOpen} />
 }
 
 function SimControl({ inTrip }: { inTrip: boolean }) {
@@ -63,20 +120,20 @@ function SimControl({ inTrip }: { inTrip: boolean }) {
   const daysAway = Math.round((Date.parse(trip.startDay) - Date.parse(now.day)) / 86400000)
   const set = (day: string, min: number) => setSimNow(wallToUtc(trip.timezone, day, min))
   return (
-    <div className={cx('card p-3', now.simulated && 'border-violet-300 bg-violet-50')}>
+    <div className="panel" style={now.simulated ? { boxShadow: 'inset 0 0 0 1.5px #7c5cd6' } : undefined}>
       <div className="flex items-center gap-2">
         <div className="flex-1">
-          <div className="text-2xl font-semibold tabular-nums">{fmtTime(now.min)}</div>
-          <div className="text-xs text-slate-500">
+          <div className="text-[28px] font-bold leading-tight tracking-tight tabular-nums">{clock(now.min)}</div>
+          <div className="text-xs t-sub">
             {dayLabel(now.day, 'long')} · {trip.timezone.split('/')[1]?.replace('_', ' ')} time
-            {now.simulated && <b className="text-violet-700"> · pretend mode</b>}
+            {now.simulated && <b style={{ color: '#7c5cd6' }}> · pretend mode</b>}
           </div>
         </div>
-        {simNow != null && <button className="btn-soft" onClick={() => setSimNow(null)}>Back to real time</button>}
+        {simNow != null && <button className="btn-soft" onClick={() => setSimNow(null)}>Real time</button>}
       </div>
       {!inTrip && !now.simulated && (
-        <p className="mt-2 text-sm text-slate-600">
-          {daysAway > 0 ? `Trip starts in ${daysAway} day${daysAway === 1 ? '' : 's'}.` : 'The trip is over.'} You can preview this screen by pretending it's a time during the trip:
+        <p className="mt-2 text-sm t-sub">
+          {daysAway > 0 ? `Trip starts in ${daysAway} day${daysAway === 1 ? '' : 's'}.` : 'The trip is over.'} Preview this screen by pretending it's a time during the trip:
         </p>
       )}
       <div className="mt-2 flex flex-wrap items-center gap-1.5">
@@ -90,67 +147,17 @@ function SimControl({ inTrip }: { inTrip: boolean }) {
           }}
         />
         {!inTrip && (
-          <button className="btn-soft py-1" onClick={() => set(trip.blocks.find((b) => b.locked)?.day ?? trip.startDay, 14 * 60)}>
+          <button className="btn-soft py-1.5" onClick={() => set(trip.blocks.find((b) => b.locked)?.day ?? trip.startDay, 14 * 60)}>
             Try a game day, 2pm
           </button>
         )}
         {now.simulated && (
           <>
-            <button className="btn-soft py-1" onClick={() => setSimNow((simNow ?? Date.now()) + 15 * 60000)}>+15m</button>
-            <button className="btn-soft py-1" onClick={() => setSimNow((simNow ?? Date.now()) + 60 * 60000)}>+1h</button>
+            <button className="btn-soft py-1.5 font-mono text-xs" onClick={() => setSimNow((simNow ?? Date.now()) + 15 * 60000)}>+15m</button>
+            <button className="btn-soft py-1.5 font-mono text-xs" onClick={() => setSimNow((simNow ?? Date.now()) + 60 * 60000)}>+1h</button>
           </>
         )}
       </div>
-    </div>
-  )
-}
-
-function NowCard({ label, block, now }: { label: string; block: Block; now: number }) {
-  const trip = useStore((s) => s.trip)
-  const item = itemById(trip, block.itemId)!
-  const pct = Math.min(100, Math.max(0, ((now - block.start) / (block.end - block.start)) * 100))
-  return (
-    <div className="card overflow-hidden">
-      <div className="h-1 bg-slate-100"><div className="h-full bg-emerald-500" style={{ width: `${pct}%` }} /></div>
-      <div className="p-3">
-        <div className="text-xs font-medium uppercase tracking-wide text-emerald-700">{label}</div>
-        <div className="text-lg font-semibold">{TYPE_META[item.type].icon} {item.title}</div>
-        <div className="text-sm text-slate-600">until {fmtTime(block.end)} · {fmtDuration(block.end - now)} left</div>
-      </div>
-    </div>
-  )
-}
-
-function NextCard({ block, from, now }: { block: Block; from?: Block; now: number }) {
-  const trip = useStore((s) => s.trip)
-  const ctx = makeCtx(trip)
-  const item = itemById(trip, block.itemId)!
-  const travel = from ? ctx.travel(from, block) : 0
-  const mode = from ? ctx.mode(from, block) : trip.defaultMode
-  const leaveBy = block.start - travel
-  const late = leaveBy < now
-  const to = item.location
-  return (
-    <div className={cx('card p-3', late && 'border-amber-300')}>
-      <div className="text-xs font-medium uppercase tracking-wide text-slate-500">Next up · {fmtTime(block.start)}</div>
-      <div className="text-lg font-semibold">{TYPE_META[item.type].icon} {item.title} {block.locked && '🔒'}</div>
-      {travel > 0 ? (
-        <div className={cx('mt-1 text-sm', late ? 'text-amber-800' : 'text-slate-700')}>
-          {late ? (
-            <>⚠️ Should have left {fmtDuration(now - leaveBy)} ago</>
-          ) : (
-            <>Leave by <b>{fmtTime(leaveBy)}</b> (in {fmtDuration(leaveBy - now)})</>
-          )}{' '}
-          · {MODE_ICON[mode]} ~{travel}m
-        </div>
-      ) : (
-        <div className="mt-1 text-sm text-slate-700">Starts in {fmtDuration(block.start - now)}</div>
-      )}
-      {to && (
-        <a className="mt-2 inline-block text-sm font-medium text-sky-700" href={directionsUrl(from && ctx.loc(from), to, mode)} target="_blank" rel="noreferrer">
-          Directions ↗
-        </a>
-      )}
     </div>
   )
 }
@@ -170,49 +177,45 @@ function RunningLate({ day, now }: { day: string; now: number }) {
   }
 
   return (
-    <div className="card p-3">
+    <div className="panel">
       <div className="flex items-center gap-2">
-        <span className="text-sm font-semibold">Running late?</span>
-        <div className="ml-auto flex gap-1">
+        <span className="label">Running late?</span>
+        <div className="seg ml-auto grid-cols-4" style={{ width: 200 }}>
           {[10, 15, 30, 60].map((m) => (
-            <button key={m} onClick={() => { setDelay(delay === m ? null : m); setDone(null) }} className={cx('rounded-md px-2.5 py-1 text-sm', delay === m ? 'bg-slate-900 text-white' : 'bg-slate-100')}>
-              +{m}
-            </button>
+            <button key={m} aria-pressed={delay === m} onClick={() => { setDelay(delay === m ? null : m); setDone(null) }}>+{m}</button>
           ))}
         </div>
       </div>
-      {done && <p className="mt-2 text-sm text-emerald-700">✓ {done}. Undo is at the top if you change your mind.</p>}
+      {done && <p className="mt-2 text-sm" style={{ color: '#15803d' }}>Done: {done}. Undo is at the top if you change your mind.</p>}
       {result && (
-        <div className="mt-3 space-y-2 text-sm">
+        <div className="mt-3 flex flex-col gap-2 text-sm">
           {result.base.overruns.length === 0 ? (
-            <>
-              {result.base.moved.length === 0 ? (
-                <p className="text-slate-600">No problem. Nothing else needs to move.</p>
-              ) : (
-                <>
-                  <p className="text-slate-600">Free time absorbs most of it. These shift:</p>
-                  <ShiftList before={trip.blocks} after={result.base.blocks} ids={result.base.moved} title={title} />
-                  <button className="btn w-full" onClick={() => apply(result.base.blocks, [], `Shifted ${result.base.moved.length} plan(s)`)}>
-                    Shift them
-                  </button>
-                </>
-              )}
-            </>
+            result.base.moved.length === 0 ? (
+              <p className="t-sub">No problem. Nothing else needs to move.</p>
+            ) : (
+              <>
+                <p className="t-sub">Free time absorbs most of it. These shift:</p>
+                <ShiftList before={trip.blocks} after={result.base.blocks} ids={result.base.moved} title={title} />
+                <button className="btn w-full" onClick={() => apply(result.base.blocks, [], `shifted ${result.base.moved.length} plan(s)`)}>Shift them</button>
+              </>
+            )
           ) : (
             <>
-              <p className={cx('rounded-md border px-2 py-1.5', SEVERITY_STYLE.error)}>
-                ⛔ Pushing everything back makes you ~{result.base.overruns[0].minutes}m late for <b>{title(result.base.overruns[0].blockId)}</b>, which has a fixed time.
+              <p className="flex items-start gap-2 rounded-lg px-2.5 py-2" style={{ background: 'var(--warn-bg)', color: 'var(--warn-fg)' }}>
+                <CircleAlert size={16} className="mt-0.5 flex-none" />
+                <span>Pushing everything back makes you ~{result.base.overruns[0].minutes} min late for <b>{title(result.base.overruns[0].blockId)}</b>, which has a fixed time.</span>
               </p>
-              {result.suggestions.length === 0 && <p className="text-slate-600">No easy fix. Open the Plan tab to rework the day by hand.</p>}
+              {result.suggestions.length === 0 && <p className="t-sub">No easy fix. Open the Plan tab to rework the day.</p>}
               {result.suggestions.map((s) => (
-                <button key={s.id} onClick={() => apply(s.blocks, s.dropped, s.label)} className="flex w-full flex-col items-start rounded-lg border border-slate-200 px-3 py-2 text-left hover:bg-slate-50">
-                  <span className="font-medium">{s.label}</span>
-                  <span className="text-xs text-slate-500">{s.detail}</span>
+                <button key={s.id} onClick={() => apply(s.blocks, s.dropped, s.label.toLowerCase())} className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left" style={{ boxShadow: 'inset 0 0 0 1px var(--line)' }}>
+                  <span className="min-w-0 flex-1">
+                    <span className="block font-semibold">{s.label}</span>
+                    <span className="block text-xs t-sub">{s.detail}</span>
+                  </span>
+                  <ChevronRight size={16} className="t-sub" />
                 </button>
               ))}
-              <button className="btn-soft w-full" onClick={() => apply(result.base.blocks, [], 'Shifted plans (still late for the fixed one)')}>
-                Just shift everything anyway
-              </button>
+              <button className="btn-soft w-full" onClick={() => apply(result.base.blocks, [], 'shifted plans (still late for the fixed one)')}>Shift everything anyway</button>
             </>
           )}
         </div>
@@ -223,13 +226,13 @@ function RunningLate({ day, now }: { day: string; now: number }) {
 
 function ShiftList({ before, after, ids, title }: { before: Block[]; after: Block[]; ids: string[]; title: (id: string) => string }) {
   return (
-    <ul className="space-y-0.5 text-xs text-slate-600">
+    <ul className="flex flex-col gap-0.5 font-mono text-xs t-sub">
       {ids.map((id) => {
         const a = before.find((b) => b.id === id)!
         const b = after.find((x) => x.id === id)!
         return (
           <li key={id}>
-            <b>{title(id)}</b>: {fmtTime(a.start)}–{fmtTime(a.end)} → {fmtTime(b.start)}–{fmtTime(b.end)}
+            <b className="font-sans" style={{ color: 'var(--ink)' }}>{title(id)}</b> {clock(a.start)} → {clock(b.start)}
           </li>
         )
       })}
@@ -260,33 +263,40 @@ function OpenNearby({ here, day, now }: { here: LatLng; day: string; now: number
     .slice(0, 8)
 
   return (
-    <div className="card p-3">
+    <div className="panel mt-2">
       <div className="mb-2 flex items-baseline gap-2">
-        <span className="text-sm font-semibold">Open now, nearby</span>
-        <span className="text-xs text-slate-500">{free < 600 ? `${fmtDuration(free)} free` : 'rest of the day free'}</span>
+        <span className="label">Open now, nearby</span>
+        <span className="ml-auto font-mono text-[11px] t-sub">{free < 600 ? `${fmtDuration(free)} free` : 'rest of the day free'}</span>
       </div>
-      <ul className="space-y-2">
-        {list.map(({ i, mode, travel, arrive, status, fits, dist }) => (
-          <li key={i.id} className={cx('flex items-center gap-2', !fits && 'opacity-60')}>
-            <span className="text-lg">{TYPE_META[i.type].icon}</span>
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-sm font-medium">{i.title}</div>
-              <div className="truncate text-xs text-slate-500">
-                {MODE_ICON[mode]} {travel}m · {fmtDistance(dist)}
-                {status === 'open' ? ` · open ${hoursSummary(i.hours, day, fmtTime)}` : ' · hours unknown'}
-                {!fits && ' · not enough time'}
+      <ul className="flex flex-col">
+        {list.map(({ i, mode, travel, arrive, status, fits, dist }) => {
+          const Glyph = glyphFor(i)
+          const M = MODE_STYLE[mode].Icon
+          return (
+            <li key={i.id} className={cx('flex items-center gap-3 border-t b-line py-2 first:border-t-0', !fits && 'opacity-55')}>
+              <Glyph size={18} className="flex-none t-sub" />
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-sm font-semibold">{i.title}</div>
+                <div className="flex items-center gap-1 truncate font-mono text-[11px] t-sub">
+                  <M size={12} /> {travel} min · {fmtDistance(dist)}
+                  {status === 'open' ? ` · ${hoursSummary(i.hours, day, clock)}` : ' · hours unknown'}
+                  {!fits && ' · not enough time'}
+                </div>
               </div>
-              <InterestDots item={i} people={trip.people} />
-            </div>
-            <button
-              className="btn-soft shrink-0 px-2.5 py-1"
-              onClick={() => addBlock({ itemId: i.id, day, start: Math.ceil(arrive / 5) * 5, end: Math.ceil(arrive / 5) * 5 + Math.min(i.duration.typical, Math.max(i.duration.min, free - travel)), locked: false })}
-            >
-              Go
-            </button>
-          </li>
-        ))}
-        {!list.length && <li className="text-sm text-slate-500">Nothing on your list is open nearby right now.</li>}
+              <Votes item={i} people={trip.people} />
+              <button
+                className="btn-soft h-8 shrink-0 px-3 py-0"
+                onClick={() => {
+                  const s = Math.ceil(arrive / 5) * 5
+                  addBlock({ itemId: i.id, day, start: s, end: s + Math.min(i.duration.typical, Math.max(i.duration.min, free - travel)), locked: false })
+                }}
+              >
+                <Plus size={14} /> Go
+              </button>
+            </li>
+          )
+        })}
+        {!list.length && <li className="text-sm t-sub">Nothing on your list is open nearby right now.</li>}
       </ul>
     </div>
   )

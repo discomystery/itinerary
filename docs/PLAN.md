@@ -51,6 +51,26 @@ the schedule zero, one, or many times.
   default transit mode, share link / export / import, undo for everything.
 - Multi-timezone anchors (e.g. departure from RDU in Eastern time).
 
+## Design language (v1.1)
+
+- **Matte chrome, paper plans.** The app frame is flat and solid. Only plans get
+  paper texture and a soft lift, so they read as the content.
+- **Plans are real objects.** Events are tickets (the stub holds the hard time),
+  flights are boarding passes, transit is an HSL-style fare, bookings are
+  reservation cards (dashed until booked), lodging is a key card, places are
+  postcards (stamp + time), areas are folded maps, notes are sticky notes.
+- **One skeleton** for every object: body (glyph + what/when, title, one detail)
+  and a fixed 64px signature column, so times line up down the page.
+  Sizes: compact (list), detail (sheets), tile (two-up Ideas).
+- **Kind glyphs** (Lucide icons) name each object instead of colored stripes.
+- **Transit is a rail** between plans with a tappable pill per leg
+  ("21 min · leave 3:54p"). Tight connections turn amber. Tap for a sheet that
+  compares walk / transit / taxi with leave-by times and opens directions.
+- **Daylight**: a horizon bar under the date (dotted night, solid ink day, red
+  now tick) and "SUNSET 3:59P" set on the rail where it falls.
+- **Plan** has a List view (default) and a calendar-style Day view where travel
+  time is a striped lead-in above each plan.
+
 ## Next (v2 candidates)
 
 1. **Real-time sync + accounts** (Supabase): each person votes as themselves; activity feed.

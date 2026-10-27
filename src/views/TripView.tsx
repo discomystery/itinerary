@@ -2,7 +2,9 @@ import { useRef, useState } from 'react'
 import { Avatar, Field, Segmented } from '../components/ui'
 import { helsinkiTrip } from '../data/helsinki'
 import { downloadTrip, parseTrip, shareLink } from '../lib/share'
-import { MODE_ICON, MODES } from '../lib/transit'
+import { Download, Link2, Upload, X } from 'lucide-react'
+import { MODE_STYLE } from '../components/rail'
+import { MODES } from '../lib/transit'
 import { useStore } from '../store'
 import type { TransitMode } from '../types'
 
@@ -16,7 +18,7 @@ export default function TripView() {
 
   return (
     <div className="space-y-4 p-3">
-      <section className="card space-y-3 p-3">
+      <section className="panel space-y-3">
         <Field label="Trip name">
           <input className="input" value={trip.name} onChange={(e) => set({ name: e.target.value })} />
         </Field>
@@ -35,12 +37,12 @@ export default function TripView() {
           <Segmented<TransitMode>
             value={trip.defaultMode}
             onChange={(defaultMode) => set({ defaultMode })}
-            options={MODES.map((m) => ({ value: m, label: `${MODE_ICON[m]} ${m}` }))}
+            options={MODES.map((m) => { const M = MODE_STYLE[m]; return { value: m, label: <><M.Icon size={14} /> {M.name}</> } })}
           />
         </Field>
       </section>
 
-      <section className="card p-3">
+      <section className="panel">
         <h2 className="mb-2 text-sm font-semibold">People</h2>
         <ul className="space-y-2">
           {trip.people.map((p) => (
@@ -51,7 +53,7 @@ export default function TripView() {
               </label>
               <input className="input" value={p.name} onChange={(e) => updatePerson(p.id, { name: e.target.value })} />
               {trip.people.length > 1 && (
-                <button className="btn-ghost px-2" onClick={() => confirm(`Remove ${p.name} and their votes?`) && removePerson(p.id)}>✕</button>
+                <button className="btn-ghost px-2" onClick={() => confirm(`Remove ${p.name} and their votes?`) && removePerson(p.id)}><X size={16} /></button>
               )}
             </li>
           ))}
@@ -69,9 +71,9 @@ export default function TripView() {
         </form>
       </section>
 
-      <section className="card space-y-2 p-3">
+      <section className="panel space-y-2">
         <h2 className="text-sm font-semibold">Share &amp; back up</h2>
-        <p className="text-xs text-slate-500">
+        <p className="text-xs t-sub">
           This version stores the trip on this device only. To share it, send a link or file. Whoever opens it gets their own copy; live sync comes later.
         </p>
         <div className="flex flex-wrap gap-2">
@@ -91,10 +93,10 @@ export default function TripView() {
               }
             }}
           >
-            🔗 Share link
+            <Link2 size={16} /> Share link
           </button>
-          <button className="btn-soft" onClick={() => downloadTrip(trip)}>⬇ Export file</button>
-          <button className="btn-soft" onClick={() => file.current?.click()}>⬆ Import file</button>
+          <button className="btn-soft" onClick={() => downloadTrip(trip)}><Download size={16} /> Export file</button>
+          <button className="btn-soft" onClick={() => file.current?.click()}><Upload size={16} /> Import file</button>
           <input
             ref={file}
             type="file"
@@ -113,10 +115,10 @@ export default function TripView() {
             }}
           />
         </div>
-        {msg && <p className="text-sm text-emerald-700">{msg}</p>}
+        {msg && <p className="text-sm" style={{ color: '#15803d' }}>{msg}</p>}
       </section>
 
-      <section className="card space-y-2 p-3">
+      <section className="panel space-y-2">
         <h2 className="text-sm font-semibold">Start over</h2>
         <button className="btn-soft" onClick={() => confirm('Reset to the Helsinki sample trip? (Undo works.)') && replaceTrip(helsinkiTrip())}>
           Reset to Helsinki sample

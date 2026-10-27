@@ -1,10 +1,12 @@
 import L from 'leaflet'
 import { useEffect, useMemo, useState } from 'react'
 import { Circle, CircleMarker, MapContainer, Marker, Polyline, Popup, TileLayer, Tooltip, useMap } from 'react-leaflet'
-import { InterestDots, InterestPicker, Segmented, TYPE_META } from '../components/ui'
+import { Flame } from 'lucide-react'
+import { clock, glyphFor } from '../components/objects'
+import { InterestPicker, Segmented, TYPE_META, VoteList } from '../components/ui'
 import { hoursSummary } from '../lib/hours'
 import { dayBlocks, interestScore } from '../lib/schedule'
-import { dayLabel, dayRange, fmtTime } from '../lib/time'
+import { dayLabel, dayRange } from '../lib/time'
 import { useStore } from '../store'
 import type { Item, LatLng } from '../types'
 
@@ -52,10 +54,10 @@ export default function MapView() {
   const popup = (i: Item) => (
     <Popup>
       <div className="min-w-48 space-y-1.5">
-        <div className="font-semibold">{TYPE_META[i.type].icon} {i.title}</div>
-        {hoursSummary(i.hours, day, fmtTime) && <div className="text-xs text-slate-600">🕘 {dayLabel(day)}: {hoursSummary(i.hours, day, fmtTime)}</div>}
-        {i.address && <div className="text-xs text-slate-600">{i.address}</div>}
-        <InterestDots item={i} people={trip.people} />
+        <div className="flex items-center gap-1.5 font-semibold">{(() => { const G = glyphFor(i); return <G size={15} color={TYPE_META[i.type].color} /> })()} {i.title}</div>
+        {hoursSummary(i.hours, day, clock) && <div className="font-mono text-[11px] text-[#5a6371]">{dayLabel(day)}: {hoursSummary(i.hours, day, clock)}</div>}
+        {i.address && <div className="text-xs text-[#5a6371]">{i.address}</div>}
+        <VoteList item={i} people={trip.people} />
         <InterestPicker size="sm" value={i.interest[viewer]} onChange={(v) => setInterest(i.id, viewer, v)} />
         <button className="btn-soft w-full py-1" onClick={() => edit(i.id)}>Open</button>
       </div>
@@ -84,15 +86,15 @@ export default function MapView() {
           ),
         )}
         {route.length > 1 && (
-          <Polyline positions={route.map((r) => [r.item.location!.lat, r.item.location!.lng])} pathOptions={{ color: '#0f172a', weight: 3, opacity: 0.6, dashArray: '2 8', lineCap: 'round' }} />
+          <Polyline positions={route.map((r) => [r.item.location!.lat, r.item.location!.lng])} pathOptions={{ color: '#141a22', weight: 3, opacity: 0.55, dashArray: '2 8', lineCap: 'round' }} />
         )}
         {route.map(({ b, item }, n) => (
           <span key={b.id}>
             {item.type === 'area' && (
               <Circle center={[item.location!.lat, item.location!.lng]} radius={item.areaRadius ?? 400} pathOptions={{ color: color(item), dashArray: '6 6', weight: 2, fillOpacity: 0.1 }} />
             )}
-            <Marker position={[item.location!.lat, item.location!.lng]} icon={numIcon(n + 1, b.locked ? '#e11d48' : color(item))}>
-              <Tooltip direction="top" offset={[0, -10]}>{fmtTime(b.start)} {item.title}</Tooltip>
+            <Marker position={[item.location!.lat, item.location!.lng]} icon={numIcon(n + 1, b.locked ? '#c8102e' : color(item))}>
+              <Tooltip direction="top" offset={[0, -10]}>{clock(b.start)} {item.title}</Tooltip>
               {popup(item)}
             </Marker>
           </span>
@@ -101,19 +103,20 @@ export default function MapView() {
 
       <div className="pointer-events-none absolute inset-x-0 top-0 z-[500] space-y-2 p-2">
         <div className="pointer-events-auto flex flex-wrap gap-2">
-          <div className="rounded-lg bg-white/95 shadow"><Segmented value={show} onChange={setShow} options={[{ value: 'day', label: 'Day route' }, { value: 'all', label: 'Everything' }]} /></div>
-          <div className="rounded-lg bg-white/95 shadow"><Segmented value={colorBy} onChange={setColorBy} options={[{ value: 'type', label: 'Type' }, { value: 'interest', label: '🔥 Interest' }]} /></div>
+          <div className="chrome rounded-lg shadow"><Segmented value={show} onChange={setShow} options={[{ value: 'day', label: 'Day route' }, { value: 'all', label: 'Everything' }]} /></div>
+          <div className="chrome rounded-lg shadow"><Segmented value={colorBy} onChange={setColorBy} options={[{ value: 'type', label: 'Kind' }, { value: 'interest', label: <><Flame size={13} /> Interest</> }]} /></div>
         </div>
         <div className="pointer-events-auto flex gap-1 overflow-x-auto">
           {days.map((d) => (
-            <button key={d} onClick={() => setDay(d)} className={`shrink-0 rounded-md px-2 py-1 text-xs shadow ${d === day ? 'bg-slate-900 text-white' : 'bg-white/95'}`}>
+            <button key={d} onClick={() => setDay(d)} className="shrink-0 rounded-md px-2 py-1 text-xs font-medium shadow"
+              style={d === day ? { background: 'var(--ink)', color: 'var(--chrome)' } : { background: 'var(--chrome)' }}>
               {dayLabel(d)}
             </button>
           ))}
         </div>
       </div>
       {show === 'day' && route.length === 0 && (
-        <div className="absolute inset-x-0 bottom-3 z-[500] mx-auto w-fit rounded-lg bg-white/95 px-3 py-2 text-sm shadow">Nothing with a location on {dayLabel(day)} yet</div>
+        <div className="chrome absolute inset-x-0 bottom-3 z-[500] mx-auto w-fit rounded-lg px-3 py-2 text-sm shadow">Nothing with a location on {dayLabel(day)} yet</div>
       )}
     </div>
   )

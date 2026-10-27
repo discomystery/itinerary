@@ -1,26 +1,27 @@
+import { CalendarPlus, Heart, Plus, Search } from 'lucide-react'
 import { useState } from 'react'
-import { cx, InterestDots, InterestPicker, Sheet, TYPE_META } from '../components/ui'
+import { clock, ObjectCard } from '../components/objects'
+import { INTEREST_META, INTERESTS, Sheet } from '../components/ui'
 import { hoursSummary } from '../lib/hours'
 import { anchoredSlot, findSlot, interestScore } from '../lib/schedule'
-import { dayLabel, dayRange, fmtDuration, fmtTime } from '../lib/time'
+import { dayLabel, dayRange, fmtDuration } from '../lib/time'
 import { useStore } from '../store'
-import type { Item, Trip } from '../types'
+import type { Interest, Item, Trip } from '../types'
 
 type Filter = 'all' | 'unscheduled' | 'must' | 'everyone' | 'needsVote' | 'tbd'
 
 const FILTERS: { id: Filter; label: string }[] = [
   { id: 'all', label: 'All' },
-  { id: 'unscheduled', label: 'Not scheduled' },
-  { id: 'must', label: '❤️ Must-dos' },
-  { id: 'everyone', label: '🤝 Everyone’s in' },
-  { id: 'needsVote', label: '🗳️ Needs my vote' },
-  { id: 'tbd', label: '❓ Needs details' },
+  { id: 'unscheduled', label: 'Not planned' },
+  { id: 'must', label: 'Must-dos' },
+  { id: 'everyone', label: 'Everyone’s in' },
+  { id: 'needsVote', label: 'Needs my vote' },
+  { id: 'tbd', label: 'Needs details' },
 ]
 
 export default function IdeasView() {
   const trip = useStore((s) => s.trip)
   const viewer = useStore((s) => s.viewer)
-  const day = useStore((s) => s.day)
   const { setInterest, edit, addItem } = useStore()
   const [filter, setFilter] = useState<Filter>('all')
   const [q, setQ] = useState('')
@@ -45,80 +46,97 @@ export default function IdeasView() {
     .sort((a, b) => interestScore(b) - interestScore(a) || a.createdAt - b.createdAt)
 
   return (
-    <div className="space-y-3 p-3">
+    <div className="flex flex-col gap-3 px-3 pb-8 pt-3">
+      <div className="flex items-end justify-between px-1">
+        <div className="text-[28px] font-bold leading-tight tracking-tight">Ideas</div>
+        <span className="mb-1 font-mono text-xs t-sub">{trip.items.length} ideas</span>
+      </div>
       <div className="flex gap-2">
-        <input className="input" placeholder="Search ideas, tags, notes…" value={q} onChange={(e) => setQ(e.target.value)} />
-        <button className="btn shrink-0" onClick={() => edit(addItem({}))}>＋ Idea</button>
+        <label className="relative flex-1">
+          <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 t-sub" />
+          <input className="input pl-9" placeholder="Search ideas, tags, notes" value={q} onChange={(e) => setQ(e.target.value)} />
+        </label>
+        <button className="btn shrink-0" onClick={() => edit(addItem({}))}><Plus size={16} /> Idea</button>
       </div>
       <div className="-mx-3 flex gap-1.5 overflow-x-auto px-3">
         {FILTERS.map((f) => (
-          <button key={f.id} onClick={() => setFilter(f.id)} className={cx('shrink-0 rounded-full px-3 py-1 text-sm', filter === f.id ? 'bg-slate-900 text-white' : 'bg-white text-slate-700 ring-1 ring-slate-200')}>
+          <button
+            key={f.id}
+            onClick={() => setFilter(f.id)}
+            aria-pressed={filter === f.id}
+            className="shrink-0 rounded-full px-3 py-1 text-[13px] font-medium"
+            style={filter === f.id ? { background: 'var(--ink)', color: 'var(--chrome)' } : { background: 'var(--chrome)', boxShadow: 'inset 0 0 0 1px var(--line)' }}
+          >
             {f.label}
           </button>
         ))}
       </div>
-      <ul className="space-y-2">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
         {items.map((i) => (
-          <IdeaCard
-            key={i.id}
-            trip={trip}
-            item={i}
-            day={day}
-            viewer={viewer}
-            onVote={(v) => setInterest(i.id, viewer, v)}
-            onOpen={() => edit(i.id)}
-            onSchedule={() => setScheduling(i)}
-          />
+          <Tile key={i.id} trip={trip} item={i} vote={i.interest[viewer]} onVote={(v) => setInterest(i.id, viewer, v)} onOpen={() => edit(i.id)} onSchedule={() => setScheduling(i)} />
         ))}
-        {!items.length && <li className="py-8 text-center text-sm text-slate-500">Nothing here.</li>}
-      </ul>
+      </div>
+      {!items.length && <p className="py-8 text-center text-sm t-sub">Nothing here.</p>}
       {scheduling && <ScheduleSheet trip={trip} item={scheduling} onClose={() => setScheduling(null)} />}
     </div>
   )
 }
 
-function IdeaCard({ trip, item: i, day, viewer, onVote, onOpen, onSchedule }: {
+const nextVote = (v?: Interest): Interest | null => {
+  if (!v) return 'must'
+  const i = INTERESTS.indexOf(v)
+  return i === INTERESTS.length - 1 ? null : INTERESTS[i + 1]
+}
+
+function Tile({ trip, item: i, vote, onVote, onOpen, onSchedule }: {
   trip: Trip
   item: Item
-  day: string
-  viewer: string
-  onVote: (v: Item['interest'][string] | null) => void
+  vote?: Interest
+  onVote: (v: Interest | null) => void
   onOpen: () => void
   onSchedule: () => void
 }) {
-  const blocks = trip.blocks.filter((b) => b.itemId === i.id).sort((a, b) => a.day.localeCompare(b.day))
-  const hours = hoursSummary(i.hours, day, fmtTime)
+  const blocks = trip.blocks.filter((b) => b.itemId === i.id).sort((a, b) => a.day.localeCompare(b.day) || a.start - b.start)
+  const V = vote ? INTEREST_META[vote] : null
+  const when = blocks[0] ? `${dayLabel(blocks[0].day).split(',')[0]} ${clock(blocks[0].start)}` : null
   return (
-    <li className="card p-3" onClick={onOpen}>
-      <div className="flex items-start gap-2">
-        <span className="text-xl leading-6">{TYPE_META[i.type].icon}</span>
-        <div className="min-w-0 flex-1">
-          <div className="font-medium">{i.title}</div>
-          <div className="mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5 text-xs text-slate-500">
-            <span>~{fmtDuration(i.duration.typical)}</span>
-            {hours && <span>🕘 {dayLabel(day).split(',')[0]} {hours}{i.hoursSource === 'unverified' && '*'}</span>}
-            {i.prefersDaylight && <span>☀️ daylight</span>}
-            {i.anchors.map((a) => <span key={a.id}>{a.hard ? '🔒' : '◌'} {a.label} {dayLabel(a.day).split(',')[0]} {fmtTime(a.time)}</span>)}
-            {i.tags.map((t) => <span key={t}>#{t}</span>)}
-          </div>
-          {i.tbd && <div className="mt-1 text-xs text-amber-700">❓ {i.tbd}</div>}
-          <div className="mt-1.5"><InterestDots item={i} people={trip.people} /></div>
-        </div>
-      </div>
-      <div className="mt-2 flex flex-wrap items-center gap-2" onClick={(e) => e.stopPropagation()}>
-        <InterestPicker size="sm" value={i.interest[viewer]} onChange={onVote} />
-        <div className="ml-auto flex flex-wrap items-center gap-1">
-          {blocks.map((b) => (
-            <span key={b.id} className="chip">{dayLabel(b.day).split(',')[0]} {fmtTime(b.start)}</span>
-          ))}
-          {i.type !== 'note' && (
-            <button className="btn-soft px-2.5 py-1" onClick={onSchedule}>
-              {blocks.length ? '＋' : 'Schedule'}
-            </button>
-          )}
-        </div>
-      </div>
-    </li>
+    <div role="button" tabIndex={0} onClick={onOpen} onKeyDown={(e) => e.key === 'Enter' && onOpen()} className="cursor-pointer">
+      <ObjectCard
+        item={i}
+        size="t"
+        tz={trip.timezone}
+        people={trip.people}
+        eyebrow={undefined}
+        sig={
+          <>
+            <span className="font-mono text-[11px] font-semibold" style={{ opacity: when ? 1 : 0.55 }}>
+              {when ?? 'Not planned'}{blocks.length > 1 && ` +${blocks.length - 1}`}
+            </span>
+            <span className="flex gap-1">
+              <button
+                className="grid h-7 w-7 place-items-center rounded-full"
+                style={{ background: V ? V.color : 'transparent', color: V ? '#fff' : 'currentColor', boxShadow: V ? 'none' : 'inset 0 0 0 1px currentColor', opacity: V ? 1 : 0.6 }}
+                onClick={(e) => { e.stopPropagation(); onVote(nextVote(vote)) }}
+                aria-label={V ? `Your vote: ${V.label}. Tap to change` : 'Vote'}
+                title={V ? V.label : 'Tap to vote'}
+              >
+                {V ? <V.Icon size={14} fill={vote === 'must' ? 'currentColor' : 'none'} /> : <Heart size={14} />}
+              </button>
+              {i.type !== 'note' && (
+                <button
+                  className="grid h-7 w-7 place-items-center rounded-full"
+                  style={{ boxShadow: 'inset 0 0 0 1px currentColor', opacity: 0.6 }}
+                  onClick={(e) => { e.stopPropagation(); onSchedule() }}
+                  aria-label="Add to a day"
+                >
+                  <CalendarPlus size={14} />
+                </button>
+              )}
+            </span>
+          </>
+        }
+      />
+    </div>
   )
 }
 
@@ -133,23 +151,23 @@ function ScheduleSheet({ trip, item, onClose }: { trip: Trip; item: Item; onClos
     onClose()
   }
   return (
-    <Sheet open onClose={onClose} title={`Schedule ${item.title}`}>
+    <Sheet open onClose={onClose} title={`Add ${item.title}`}>
       {anchored && (
         <button className="btn mb-3 w-full" onClick={() => go(anchored.day, anchored)}>
-          At its set time: {dayLabel(anchored.day)}, {fmtTime(anchored.start)}–{fmtTime(anchored.end)}
+          At its set time: {dayLabel(anchored.day)}, {clock(anchored.start)}
         </button>
       )}
-      <p className="mb-2 text-xs text-slate-500">First open gap each day that fits ~{fmtDuration(item.duration.typical)} and the place's hours:</p>
-      <ul className="space-y-1.5">
+      <p className="mb-2 text-xs t-sub">First open gap each day that fits ~{fmtDuration(item.duration.typical)} and the opening hours:</p>
+      <ul className="flex flex-col gap-1.5">
         {days.map((d) => {
           const slot = findSlot(trip, d, item)
-          const hours = hoursSummary(item.hours, d, fmtTime)
+          const hours = hoursSummary(item.hours, d, clock)
           return (
             <li key={d}>
-              <button disabled={!slot} onClick={() => slot && go(d, slot)} className="flex w-full items-center justify-between rounded-lg border border-slate-200 px-3 py-2 text-left text-sm hover:bg-slate-50 disabled:opacity-40">
-                <span className="font-medium">{dayLabel(d)}</span>
-                <span className="text-xs text-slate-500">
-                  {slot ? `${fmtTime(slot.start)}–${fmtTime(slot.end)}` : 'no room'}
+              <button disabled={!slot} onClick={() => slot && go(d, slot)} className="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-sm disabled:opacity-40" style={{ boxShadow: 'inset 0 0 0 1px var(--line)' }}>
+                <span className="font-semibold">{dayLabel(d)}</span>
+                <span className="font-mono text-xs t-sub">
+                  {slot ? `${clock(slot.start)}–${clock(slot.end)}` : 'no room'}
                   {hours && ` · ${hours}`}
                 </span>
               </button>
