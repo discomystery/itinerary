@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { helsinkiTrip } from '../data/helsinki'
 import type { FlightLeg, Item, Trip } from '../types'
-import { applyLegs, flightIssues, flightSpan, flightStatus, layovers, route, via } from './flights'
+import { applyLegs, legFromCard, flightIssues, flightSpan, flightStatus, layovers, route, via } from './flights'
 import { analyzeDay, anchoredSlot, makeCtx } from './schedule'
 import { wallToUtc } from './time'
 
@@ -77,15 +77,33 @@ describe('flights', () => {
     const item: Item = { ...base, ...applyLegs(base, outbound, TZ) }
     expect(item.anchors.map((a) => [a.label, a.tz, a.hard])).toEqual([
       ['Departs', 'America/New_York', true],
-      ['Lands', 'Europe/Helsinki', false],
+      ['Arrives', 'Europe/Helsinki', false],
     ])
     expect(item.duration.typical).toBe(1440 + t('09:45') - t('22:10'))
     expect(item.location?.lat).toBeCloseTo(35.88, 1)
+    expect(item.details).toMatchObject({ from: 'RDU', to: 'HEL' })
     expect(anchoredSlot(item, TZ)).toEqual(flightSpan(outbound, TZ))
 
     // Editing again replaces the derived anchors instead of piling them up.
     expect(applyLegs(item, outbound, TZ).anchors).toHaveLength(2)
     expect(applyLegs(item, [], TZ)).toEqual({ legs: undefined, anchors: [] })
+  })
+
+  it('turns a single flight card into its first leg', () => {
+    const base = helsinkiTrip().items.find((i) => i.id === 'i-flight-out')!
+    const card: Item = {
+      ...base,
+      details: { from: 'RDU', to: 'JFK', airline: 'AA', flight: '4421', seat: '12C' },
+      anchors: [
+        { id: 'a1', label: 'Departs', day: '2026-11-10', time: t('15:10'), hard: true, tz: 'America/New_York' },
+        { id: 'a2', label: 'Arrives', day: '2026-11-10', time: t('16:50'), hard: false, tz: 'America/New_York' },
+      ],
+    }
+    expect(legFromCard(card, '2026-11-10')).toMatchObject({
+      from: 'RDU', to: 'JFK', flightNo: 'AA 4421', seat: '12C',
+      depart: { day: '2026-11-10', time: t('15:10') },
+      arrive: { day: '2026-11-10', time: t('16:50') },
+    })
   })
 
   it('routes the next transit leg from the landing airport', () => {

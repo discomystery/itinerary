@@ -207,3 +207,34 @@ export function Segmented<T extends string>({ value, options, onChange }: {
     </div>
   )
 }
+
+/** The Papermap wordmark: a folded map with a dotted route on it. */
+export function Mark() {
+  return (
+    <span className="mark">
+      <svg viewBox="0 0 30 24" aria-hidden="true">
+        <path d="M2 4 L10 1 L20 4 L28 1 L28 20 L20 23 L10 20 L2 23 Z" fill="#fbfaf7" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+        <path d="M10 1 L10 20 M20 4 L20 23" stroke="currentColor" strokeWidth="1.2" opacity=".5" />
+        <path d="M5 15 Q11 7 15 12 T25 7" fill="none" stroke="#c8102e" strokeWidth="1.6" strokeDasharray="1.5 2.5" strokeLinecap="round" />
+      </svg>
+      Papermap
+    </span>
+  )
+}
+
+/** The white band at the top of every tab: title, subtitle, controls, then the tab's own rows. */
+export function ViewHeader({ title, sub, right, top, children }: { title: ReactNode; sub?: ReactNode; right?: ReactNode; top?: ReactNode; children?: ReactNode }) {
+  return (
+    <div className="vh">
+      {top}
+      <div className="tr">
+        <div className="t">
+          {title}
+          {sub && <small>{sub}</small>}
+        </div>
+        {right && <div className="ctrl">{right}</div>}
+      </div>
+      {children}
+    </div>
+  )
+}

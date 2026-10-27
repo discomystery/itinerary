@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { helsinkiTrip } from './data/helsinki'
+import { defaultMapsApp, type MapsApp } from './lib/transit'
 import type { Block, Id, Interest, Item, Person, Trip } from './types'
 
 // All trip data lives behind this one store, so swapping localStorage for a
@@ -19,12 +20,15 @@ interface State {
   simNow: number | null
   history: Trip[]
   editing: Id | null
+  /** This device's maps app for directions and "open in maps" links. */
+  mapsApp: MapsApp
 
   setTab: (t: Tab) => void
   setDay: (d: string) => void
   setViewer: (p: Id) => void
   setSimNow: (ms: number | null) => void
   edit: (id: Id | null) => void
+  setMapsApp: (a: MapsApp) => void
 
   mutate: (fn: (t: Trip) => Trip) => void
   undo: () => void
@@ -66,12 +70,14 @@ export const useStore = create<State>()(
         simNow: null,
         history: [],
         editing: null,
+        mapsApp: defaultMapsApp(),
 
         setTab: (tab) => set({ tab }),
         setDay: (day) => set({ day }),
         setViewer: (viewer) => set({ viewer }),
         setSimNow: (simNow) => set({ simNow }),
         edit: (editing) => set({ editing }),
+        setMapsApp: (mapsApp) => set({ mapsApp }),
 
         mutate,
         undo: () =>
@@ -152,14 +158,26 @@ export const useStore = create<State>()(
           })),
 
         replaceTrip: (trip) => {
-          mutate(() => trip)
+          // Your travel documents are yours: a shared or sample trip doesn't replace them.
+          mutate((cur) => ({ ...trip, docs: trip.docs ?? cur.docs }))
           set({ viewer: trip.people[0]?.id ?? '', day: trip.startDay })
         },
       }
     },
     {
       name: 'itinerary-v1',
-      partialize: (s) => ({ trip: s.trip, viewer: s.viewer, day: s.day, tab: s.tab, simNow: s.simNow }),
+      version: 2,
+      migrate: (state, version) => {
+        const s = state as { trip?: Trip }
+        // v2: stays run check in → check out so they show on the days between.
+        const stay = s.trip?.items.find((i) => i.id === 'i-stay')
+        if (version < 2 && stay && !stay.anchors.length) {
+          const seed = helsinkiTrip().items.find((i) => i.id === 'i-stay')!
+          stay.anchors = seed.anchors
+        }
+        return state as State
+      },
+      partialize: (s) => ({ trip: s.trip, viewer: s.viewer, day: s.day, tab: s.tab, simNow: s.simNow, mapsApp: s.mapsApp }),
     },
   ),
 )

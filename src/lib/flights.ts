@@ -188,19 +188,21 @@ export function flightStatus(legs: FlightLeg[], utcMs: number, fallbackTz: strin
 
 const LEG_ANCHOR = 'leg:'
 
+export const isLegAnchor = (a: Anchor) => a.id.startsWith(LEG_ANCHOR)
+
 /**
  * The item fields that follow from its legs: "Departs"/"Lands" anchors (so
  * cards, Now and reflow keep working off anchors), the duration, and the
  * departure airport as its location.
  */
 export function applyLegs(item: Item, legs: FlightLeg[], tripTz: string): Partial<Item> {
-  const own = item.anchors.filter((a) => !a.id.startsWith(LEG_ANCHOR))
+  const own = item.anchors.filter((a) => !isLegAnchor(a))
   if (!legs.length) return { legs: undefined, anchors: own }
   const first = legs[0]
   const last = legs[legs.length - 1]
   const anchors: Anchor[] = [
     { id: `${LEG_ANCHOR}dep`, label: 'Departs', day: first.depart.day, time: first.depart.time, hard: true, tz: legTz(first, 'depart', tripTz) },
-    { id: `${LEG_ANCHOR}arr`, label: 'Lands', day: last.arrive.day, time: last.arrive.time, hard: false, tz: legTz(last, 'arrive', tripTz) },
+    { id: `${LEG_ANCHOR}arr`, label: 'Arrives', day: last.arrive.day, time: last.arrive.time, hard: false, tz: legTz(last, 'arrive', tripTz) },
   ]
   const { start, end } = flightSpan(legs, tripTz)
   const total = end - start
@@ -208,6 +210,8 @@ export function applyLegs(item: Item, legs: FlightLeg[], tripTz: string): Partia
   return {
     legs,
     anchors: [...own, ...anchors],
+    // The card's big route reads these, so it shows the whole trip.
+    details: { ...item.details, from: first.from.toUpperCase(), to: last.to.toUpperCase() },
     duration: { min: total, typical: total, max: total },
     ...(from ? { location: { lat: from.lat, lng: from.lng } } : {}),
   }
@@ -221,3 +225,28 @@ export function endLocation(item: Item): LatLng | undefined {
   }
   return item.location
 }
+
+/**
+ * The first leg of a flight that so far only has the card's single-flight
+ * fields filled in, so adding a connection keeps what was already entered.
+ */
+export function legFromCard(item: Item, fallbackDay: string): FlightLeg {
+  const d = (id: string) => item.details?.[id]?.trim() || undefined
+  const dep = item.anchors.find((a) => /depart/i.test(a.label)) ?? item.anchors.find((a) => a.hard)
+  const arr = item.anchors.find((a) => /arriv|land/i.test(a.label))
+  const depart = dep ? { day: dep.day, time: dep.time, tz: dep.tz } : { day: fallbackDay, time: 9 * 60 }
+  const arrive = arr ? { day: arr.day, time: arr.time, tz: arr.tz } : { day: depart.day, time: Math.min(depart.time + 120, 1439) }
+  return {
+    id: `leg-${item.id}-1`,
+    from: d('from') ?? '',
+    to: d('to') ?? '',
+    flightNo: [d('airline'), d('flight')].filter(Boolean).join(' ') || undefined,
+    depart,
+    arrive,
+    seat: d('seat'),
+    confirmation: d('conf'),
+  }
+}
+
+/** Card fields that move onto each leg once a flight has connections. */
+export const PER_LEG_FIELDS = ['from', 'to', 'airline', 'flight', 'seat', 'conf']

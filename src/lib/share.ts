@@ -32,7 +32,9 @@ async function pipe(bytes: Uint8Array, stream: CompressionStream | Decompression
 }
 
 export async function shareLink(trip: Trip): Promise<string> {
-  const zipped = await pipe(new TextEncoder().encode(JSON.stringify(trip)), new CompressionStream('gzip'))
+  // Travel documents (passport numbers, policies) stay on this device.
+  const { docs: _docs, ...shared } = trip
+  const zipped = await pipe(new TextEncoder().encode(JSON.stringify(shared)), new CompressionStream('gzip'))
   let bin = ''
   for (let i = 0; i < zipped.length; i += 8192) bin += String.fromCharCode(...zipped.subarray(i, i + 8192))
   const enc = btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')

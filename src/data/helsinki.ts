@@ -85,6 +85,10 @@ export const helsinkiItems: Item[] = [
     type: 'reservation',
     duration: d(0, 0, 0),
     tags: ['lodging'],
+    anchors: [
+      a('a-stay-in', 'Check in', '2026-11-11', '15:00', false),
+      a('a-stay-out', 'Check out', '2026-11-16', '11:00', true),
+    ],
     tbd: 'Add the hotel or Airbnb address',
   }),
   item({
