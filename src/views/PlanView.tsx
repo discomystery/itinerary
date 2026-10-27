@@ -1,4 +1,4 @@
-import { ArrowRight, CalendarDays, ChevronRight, Clock, Ellipsis, GripVertical, List, Lock, LockOpen, MapPin, Navigation, Pencil, Plus, StickyNote, Trash2, TriangleAlert, Undo2 } from 'lucide-react'
+import { ArrowRight, CalendarDays, CalendarPlus, ChevronRight, Clock, Ellipsis, GripVertical, List, Lock, LockOpen, MapPin, Navigation, Pencil, Plus, StickyNote, Trash2, TriangleAlert, Undo2 } from 'lucide-react'
 import { Fragment, type ReactNode, useMemo, useRef, useState } from 'react'
 import { clock, glyphFor, objectKind, ObjectCard } from '../components/objects'
 import { Horizon, LegPill, LegSheet, leaveAt, MODE_STYLE, RailGap, RailMark, railVars } from '../components/rail'
@@ -8,6 +8,7 @@ import { cx, IssueList, Sheet, ViewHeader, Votes } from '../components/ui'
 import { daylight, hoursSummary, openSpans, openStatus } from '../lib/hours'
 import { type DayAnalysis, type Leg, analyzeDay, anchorOnDay, anchoredSlot, findSlot, interestScore, makeCtx, worstSeverity } from '../lib/schedule'
 import { dayLabel, dayRange, fmtDuration, parseHHMM, snap, toHHMM } from '../lib/time'
+import { downloadCalendar } from '../lib/ics'
 import { directionsUrl } from '../lib/transit'
 import { useNow } from '../lib/useNow'
 import { useWeather } from '../lib/weather'
@@ -586,6 +587,7 @@ function MoreSheet({ id, onClose, onWhen }: { id: string; onClose: () => void; o
       <div className="menu">
         <button onClick={onWhen}><CalendarDays />Change the day or time</button>
         <button onClick={() => { onClose(); edit(item.id) }}><Pencil />Edit the card</button>
+        <button onClick={() => { downloadCalendar(trip, [b], item.title); onClose() }}><CalendarPlus />Add to calendar</button>
         <button onClick={() => { removeBlock(b.id); onClose() }}><Undo2 />Unschedule (keep the idea)</button>
         <button className="danger" onClick={() => { if (confirm(`Delete “${item.title}” from the trip?`)) { deleteItem(item.id); onClose() } }}><Trash2 />Delete the idea</button>
       </div>

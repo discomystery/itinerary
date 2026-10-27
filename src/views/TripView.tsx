@@ -1,8 +1,9 @@
-import { BookUser, Download, Link2, Pencil, Plus, Share, ShieldCheck, Stamp, Star, Upload, UserPlus, Wallet, X } from 'lucide-react'
+import { BookUser, CalendarPlus, Download, Link2, Pencil, Plus, Share, ShieldCheck, Stamp, Star, Upload, UserPlus, Wallet, X } from 'lucide-react'
 import { type ReactNode, useRef, useState } from 'react'
 import { MODE_STYLE } from '../components/rail'
 import { Avatar, Field, Sheet, ViewHeader } from '../components/ui'
 import { helsinkiTrip } from '../data/helsinki'
+import { downloadCalendar } from '../lib/ics'
 import { downloadTrip, parseTrip, shareLink } from '../lib/share'
 import { dayLabel, dayRange, wallToUtc } from '../lib/time'
 import { MAPS_APP_NAME, type MapsApp, MODES } from '../lib/transit'
@@ -126,6 +127,7 @@ export default function TripView() {
           <button className="pri" onClick={share}><Link2 />Share link</button>
           <button onClick={() => downloadTrip(trip)}><Download />Export</button>
           <button onClick={() => file.current?.click()}><Upload />Import</button>
+          <button onClick={() => downloadCalendar(trip)} disabled={!trip.blocks.length}><CalendarPlus />Calendar</button>
         </div>
         <input
           ref={file}
@@ -145,7 +147,7 @@ export default function TripView() {
           }}
         />
         {msg && <p className="text-sm" style={{ color: '#15803d' }}>{msg}</p>}
-        <p className="text-xs t-sub">Whoever opens a link or file gets their own copy. Live sync comes later.</p>
+        <p className="text-xs t-sub">Whoever opens a link or file gets their own copy. Live sync comes later. Calendar adds every plan to your phone's calendar; add it again after plans change.</p>
 
         <button
           className="pn trow"
