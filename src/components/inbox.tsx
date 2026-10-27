@@ -73,7 +73,7 @@ export function PasteSheet({ onClose, onAdded }: { onClose: () => void; onAdded:
       }
     >
       <p className="mb-2 text-sm t-sub">
-        One idea per line: a friend's text, your notes, Google Maps links. Each one gets looked up on the map and lands in the Inbox for review.
+        One idea per line: a friend's text, your notes, Apple or Google Maps links. Each one gets looked up on the map and lands in the Inbox for review.
       </p>
       <textarea
         className="input min-h-36 font-mono text-[13px] leading-relaxed"

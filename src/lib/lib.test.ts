@@ -5,7 +5,7 @@ import { daylight, openSpans, openStatus } from './hours'
 import { cascade, runningLate } from './reflow'
 import { analyzeDay, anchorInTrip, anchoredSlot, findSlot, makeCtx } from './schedule'
 import { nowIn, wallToUtc } from './time'
-import { travelMinutes } from './transit'
+import { defaultMapsApp, directionsUrl, placeUrl, travelMinutes } from './transit'
 
 const TZ = 'Europe/Helsinki'
 
@@ -135,5 +135,27 @@ describe('running late', () => {
       expect(byId(s.blocks, 'b-4').start).toBeLessThanOrEqual(19 * 60)
     }
     expect(r.suggestions.map((s) => s.id)).toContain('skip-b-3')
+  })
+})
+
+describe('maps links', () => {
+  const a = { lat: 60.1699, lng: 24.9384 }
+  const b = { lat: 60.1525, lng: 24.9278 }
+
+  it('builds Apple Maps directions with the right travel mode', () => {
+    expect(directionsUrl(a, b, 'transit', 'apple')).toBe('https://maps.apple.com/?daddr=60.1525%2C24.9278&dirflg=r&saddr=60.1699%2C24.9384')
+    expect(directionsUrl(undefined, b, 'walk', 'apple')).toBe('https://maps.apple.com/?daddr=60.1525%2C24.9278&dirflg=w')
+    expect(directionsUrl(a, b, 'drive')).toContain('https://www.google.com/maps/dir/?api=1')
+  })
+
+  it('opens a place pinned and labeled', () => {
+    expect(placeUrl('Löyly', b, 'apple')).toBe('https://maps.apple.com/?ll=60.1525%2C24.9278&q=L%C3%B6yly')
+    expect(placeUrl('Löyly', b, 'google')).toBe('https://www.google.com/maps/search/?api=1&query=60.1525%2C24.9278')
+  })
+
+  it('defaults to Apple Maps on Apple devices', () => {
+    expect(defaultMapsApp('Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)')).toBe('apple')
+    expect(defaultMapsApp('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)')).toBe('apple')
+    expect(defaultMapsApp('Mozilla/5.0 (Linux; Android 14)')).toBe('google')
   })
 })

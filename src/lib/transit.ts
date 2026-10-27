@@ -34,12 +34,35 @@ export function fmtDistance(m: number): string {
   return m < 1000 ? `${Math.round(m / 10) * 10} m` : `${(m / 1000).toFixed(1)} km`
 }
 
-const GMAPS_MODE: Record<TransitMode, string> = { walk: 'walking', transit: 'transit', drive: 'driving' }
+export type MapsApp = 'apple' | 'google'
 
-export function directionsUrl(from: LatLng | undefined, to: LatLng, mode: TransitMode): string {
-  const p = new URLSearchParams({ api: '1', destination: `${to.lat},${to.lng}`, travelmode: GMAPS_MODE[mode] })
-  if (from) p.set('origin', `${from.lat},${from.lng}`)
+export const MAPS_APP_NAME: Record<MapsApp, string> = { apple: 'Apple Maps', google: 'Google Maps' }
+
+/** Apple devices open maps.apple.com links in the Maps app, so default to it there. */
+export function defaultMapsApp(ua = typeof navigator === 'undefined' ? '' : navigator.userAgent): MapsApp {
+  return /iPhone|iPad|iPod|Macintosh/.test(ua) ? 'apple' : 'google'
+}
+
+const GMAPS_MODE: Record<TransitMode, string> = { walk: 'walking', transit: 'transit', drive: 'driving' }
+const APPLE_MODE: Record<TransitMode, string> = { walk: 'w', transit: 'r', drive: 'd' }
+const ll = (p: LatLng) => `${p.lat},${p.lng}`
+
+export function directionsUrl(from: LatLng | undefined, to: LatLng, mode: TransitMode, app: MapsApp = 'google'): string {
+  if (app === 'apple') {
+    // No saddr means "from my current location", same as Google without an origin.
+    const p = new URLSearchParams({ daddr: ll(to), dirflg: APPLE_MODE[mode] })
+    if (from) p.set('saddr', ll(from))
+    return `https://maps.apple.com/?${p}`
+  }
+  const p = new URLSearchParams({ api: '1', destination: ll(to), travelmode: GMAPS_MODE[mode] })
+  if (from) p.set('origin', ll(from))
   return `https://www.google.com/maps/dir/?${p}`
+}
+
+/** Open a single place, pinned at its coordinates and labeled with its name. */
+export function placeUrl(name: string, at: LatLng, app: MapsApp = 'google'): string {
+  if (app === 'apple') return `https://maps.apple.com/?${new URLSearchParams({ ll: ll(at), q: name })}`
+  return `https://www.google.com/maps/search/?${new URLSearchParams({ api: '1', query: ll(at) })}`
 }
 
 export const MODE_ICON: Record<TransitMode, string> = { walk: '🚶', transit: '🚋', drive: '🚕' }
