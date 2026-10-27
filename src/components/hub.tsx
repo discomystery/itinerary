@@ -1,9 +1,9 @@
 import type { LucideIcon } from 'lucide-react'
 import { CalendarPlus, Navigation, Pencil, Undo2, X } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { type ReactNode, useEffect, useMemo, useState } from 'react'
 import { clock, ObjectCard } from './objects'
 import { LegSheet } from './rail'
-import { Avatar } from './ui'
+import { Avatar, cx } from './ui'
 import { useRoutes } from '../lib/routeCache'
 import { analyzeDay, anchoredSlot, findSlot, type Leg, makeCtx } from '../lib/schedule'
 import { dayLabel } from '../lib/time'
@@ -61,6 +61,15 @@ export function TopTabs({ tabs }: { tabs: TabDef[] }) {
   )
 }
 
+/** A dark, lit stage the picked card sits on, settling into place each time the pick changes. */
+function Stage({ id, grow, children }: { id: string; grow?: boolean; children: ReactNode }) {
+  return (
+    <div className={cx('stage', grow && 'grow')}>
+      <div key={id} className="hero">{children}</div>
+    </div>
+  )
+}
+
 /** What the details pane shows: a plan on a day, or an idea still in the pool. */
 export function picked(trip: Trip, selected: string | null) {
   if (!selected) return null
@@ -105,11 +114,9 @@ export function DetailPane() {
           <div className="x"><b>Idea</b><small>Not on a day yet</small></div>
           {close}
         </div>
-        <div className="db">
-          <div className="sheetdesk">
-            <ObjectCard item={item} tz={trip.timezone} people={trip.people} open onEdit={() => edit(item.id)} />
-          </div>
-        </div>
+        <Stage id={item.id} grow>
+          <ObjectCard item={item} tz={trip.timezone} people={trip.people} open onEdit={() => edit(item.id)} />
+        </Stage>
         <div className="df">
           <button
             className="btn-soft flex-1"
@@ -139,8 +146,11 @@ export function DetailPane() {
         <div className="x"><b>{dayLabel(b.day)}</b><small>{clock(b.start)}–{clock(b.end)}{b.locked && ' · fixed time'}</small></div>
         {close}
       </div>
+      <Stage id={b.id}>
+        <ObjectCard item={item} block={b} tz={trip.timezone} issues={analysis.issues.get(b.id)} open onEdit={() => edit(item.id)} />
+      </Stage>
       <div className="db">
-        <BlockDetail id={b.id} analysis={analysis} onLeg={setOpenLeg} />
+        <BlockDetail id={b.id} analysis={analysis} onLeg={setOpenLeg} card={false} />
       </div>
       <div className="df">
         {dir && <a className="btn-soft flex-1 dir" href={dir} target="_blank" rel="noreferrer" aria-label="Directions" title="Directions"><Navigation size={15} /><span>Directions</span></a>}

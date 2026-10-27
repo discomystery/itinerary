@@ -513,7 +513,8 @@ function BlockSheet({ id, analysis, onClose, onLeg }: { id: string; analysis: Da
 }
 
 /** A plan in full: its card, issues, when, getting there and facts. Shown in a sheet, or the details pane. */
-export function BlockDetail({ id, analysis, onLeg, onEdit }: { id: string; analysis: DayAnalysis; onLeg: (l: Leg) => void; onEdit?: () => void }) {
+/** `card={false}` leaves the card out, for a pane that shows it on its own stage. */
+export function BlockDetail({ id, analysis, onLeg, onEdit, card = true }: { id: string; analysis: DayAnalysis; onLeg: (l: Leg) => void; onEdit?: () => void; card?: boolean }) {
   const trip = useStore((s) => s.trip)
   const { updateBlock, edit } = useStore()
   const b = trip.blocks.find((x) => x.id === id)
@@ -528,7 +529,7 @@ export function BlockDetail({ id, analysis, onLeg, onEdit }: { id: string; analy
 
   return (
       <div className="sheetdesk">
-        <ObjectCard item={item} block={b} tz={trip.timezone} open onEdit={() => { onEdit?.(); edit(item.id) }} />
+        {card && <ObjectCard item={item} block={b} tz={trip.timezone} open onEdit={() => { onEdit?.(); edit(item.id) }} />}
         <IssueList issues={analysis.issues.get(b.id)} />
         <div className="pn">
           <div className="sl" style={{ margin: '0 0 8px' }}><span>When</span><span>{fmtDuration(b.end - b.start)} · usually {fmtDuration(item.duration.typical)}</span></div>
