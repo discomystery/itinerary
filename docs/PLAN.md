@@ -129,7 +129,7 @@ The app is **Papermap**: old-school travel paper is the design language.
 - Transit is searched as "arrive by the plan's start", so the leg gets the
   actual line ("Tram 4") and the **latest departure that still makes it**.
   A connection is tight when that departure is before you're free.
-- Routes are cached per device (`itinerary-routes-v1` in localStorage), not in
+- Routes are cached per device (`itinerary-routes-v2` in localStorage), not in
   the trip, so share links stay small. Transit refreshes after 3 days,
   walk/taxi after 30. Legs under 50 m or over 100 km aren't routed.
 - Until a route loads (or if it fails, or you're offline) the estimate is used
@@ -151,6 +151,20 @@ The app is **Papermap**: old-school travel paper is the design language.
   the trip's currency. Totals per day (under the day title) and for the trip
   (Trip → Costs). Each idea counts once, on its first scheduled day; a plan
   with `who` splits between just those people.
+
+## Live departures (v1.6)
+
+- **Now**: within 45 minutes of leaving on transit, the route card swaps the
+  timetable for live departures from Transitous, refreshed every minute: the
+  line, when it departs, and whether it's on time or late. The leave flag uses
+  the latest departure that still gets you there.
+- **Leg sheet**: the next few departures once you're free, with arrival times
+  (amber when they'd make you late). Live when it's today and within the hour.
+- **Running late**: names the next departure you can still catch and what it
+  does to your arrival.
+- Delays come from operators that publish real-time data to Transitous (HSL
+  trams and buses do; VR commuter trains currently show as scheduled). Live
+  departures aren't cached; the Plan keeps using timetable routes.
 
 ## Next (v2 candidates)
 

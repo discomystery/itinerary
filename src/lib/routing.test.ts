@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { Trip } from '../types'
 import { analyzeDay, makeCtx } from './schedule'
-import { lineName, parseDigitransit, parseOsrm, parseTransitous, type Route, type RouteRequest, routeKey } from './routing'
+import { bestDeparture, delayText, lineName, parseDepartures, parseDigitransit, parseOsrm, parseTransitous, type Route, type RouteRequest, routeKey } from './routing'
 
 const TZ = 'Europe/Helsinki'
 const A = { lat: 60.1699, lng: 24.9384 }
@@ -105,5 +105,41 @@ describe('legs with fetched routes', () => {
     const tight = analyzeDay(trip, '2026-11-12', makeCtx(trip, { [key]: route(17 * 60 + 20) }))
     expect(tight.legs[0].tight).toBe(true)
     expect(tight.issues.get('b2')?.[0].message).toMatch(/Tram 4.*5:20p/)
+  })
+})
+
+describe('live departures', () => {
+  const leg = (mode: string, start: string, sched: string, extra: object = {}) => ({ mode, startTime: start, scheduledStartTime: sched, ...extra })
+  const data = {
+    itineraries: [
+      {
+        startTime: '2026-11-12T15:30:00Z',
+        endTime: '2026-11-12T15:52:00Z',
+        legs: [leg('WALK', '2026-11-12T15:30:00Z', '2026-11-12T15:30:00Z'), leg('TRAM', '2026-11-12T15:36:00Z', '2026-11-12T15:34:00Z', { routeShortName: '7', realTime: true })],
+      },
+      {
+        startTime: '2026-11-12T15:20:00Z',
+        endTime: '2026-11-12T15:44:00Z',
+        legs: [leg('SUBURBAN', '2026-11-12T15:24:00Z', '2026-11-12T15:24:00Z', { routeShortName: 'D' })],
+      },
+      // Walking only: not a departure.
+      { startTime: '2026-11-12T15:20:00Z', endTime: '2026-11-12T16:10:00Z', legs: [leg('WALK', '2026-11-12T15:20:00Z', '2026-11-12T15:20:00Z')] },
+    ],
+  }
+  const deps = parseDepartures(data, '2026-11-12', TZ)
+
+  it('reads departures in order, with live delays', () => {
+    expect(deps).toEqual([
+      { leave: 17 * 60 + 20, depart: 17 * 60 + 24, arrive: 17 * 60 + 44, line: 'Train D', delay: 0, realTime: false },
+      { leave: 17 * 60 + 30, depart: 17 * 60 + 36, arrive: 17 * 60 + 52, line: 'Tram 7', delay: 2, realTime: true },
+    ])
+    expect(deps.map(delayText)).toEqual(['scheduled', '2 min late'])
+  })
+
+  it('picks the latest departure that still arrives in time', () => {
+    expect(bestDeparture(deps, 18 * 60)?.line).toBe('Tram 7')
+    expect(bestDeparture(deps, 17 * 60 + 45)?.line).toBe('Train D')
+    // Nothing makes it: the soonest one.
+    expect(bestDeparture(deps, 17 * 60)?.line).toBe('Train D')
   })
 })
