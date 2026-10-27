@@ -20,6 +20,8 @@ interface State {
   simNow: number | null
   history: Trip[]
   editing: Id | null
+  /** The plan shown in the details pane on wide screens. Not saved. */
+  selected: Id | null
   /** This device's maps app for directions and "open in maps" links. */
   mapsApp: MapsApp
 
@@ -28,6 +30,7 @@ interface State {
   setViewer: (p: Id) => void
   setSimNow: (ms: number | null) => void
   edit: (id: Id | null) => void
+  select: (id: Id | null) => void
   setMapsApp: (a: MapsApp) => void
 
   mutate: (fn: (t: Trip) => Trip) => void
@@ -70,6 +73,7 @@ export const useStore = create<State>()(
         simNow: null,
         history: [],
         editing: null,
+        selected: null,
         mapsApp: defaultMapsApp(),
 
         setTab: (tab) => set({ tab }),
@@ -77,6 +81,7 @@ export const useStore = create<State>()(
         setViewer: (viewer) => set({ viewer }),
         setSimNow: (simNow) => set({ simNow }),
         edit: (editing) => set({ editing }),
+        select: (selected) => set({ selected }),
         setMapsApp: (mapsApp) => set({ mapsApp }),
 
         mutate,

@@ -1,14 +1,16 @@
 import type { LucideIcon } from 'lucide-react'
-import { Undo2 } from 'lucide-react'
+import { Navigation, Pencil, Undo2 } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { clock } from './objects'
+import { LegSheet } from './rail'
 import { Avatar, cx, Mark, Segmented } from './ui'
 import { useRoutes } from '../lib/routeCache'
-import { analyzeDay, makeCtx, worstSeverity } from '../lib/schedule'
+import { analyzeDay, type Leg, makeCtx, worstSeverity } from '../lib/schedule'
 import { dayLabel, dayRange } from '../lib/time'
+import { directionsUrl } from '../lib/transit'
 import { itemById, type Tab, useStore } from '../store'
 import IdeasView from '../views/IdeasView'
-import MapView from '../views/MapView'
+import { BlockDetail, useShownBlock } from '../views/PlanView'
 
 // Chrome for the tablet and desktop layouts. The views themselves are the phone
 // views, placed side by side; nothing here changes how a view looks inside.
@@ -131,15 +133,61 @@ export function Sidebar({ tabs }: { tabs: TabDef[] }) {
   )
 }
 
-type Aside = 'map' | 'ideas'
+/** The details pane beside a day's plan: the picked plan in full, like its sheet on a phone. */
+export function DetailPane() {
+  const trip = useStore((s) => s.trip)
+  const day = useStore((s) => s.day)
+  const mapsApp = useStore((s) => s.mapsApp)
+  const { removeBlock, edit } = useStore()
+  const routes = useRoutes((s) => s.routes)
+  const ctx = useMemo(() => makeCtx(trip, routes), [trip, routes])
+  const analysis = useMemo(() => analyzeDay(trip, day, ctx), [trip, day, ctx])
+  const id = useShownBlock(analysis)
+  const [openLeg, setOpenLeg] = useState<Leg | null>(null)
+  const b = id ? trip.blocks.find((x) => x.id === id) : undefined
+  const item = b && itemById(trip, b.itemId)
 
-/** The right-hand pane beside a day's plan: its route on the map, or the ideas pool. */
+  if (!b || !item) {
+    return (
+      <div className="dempty">
+        <b>Nothing planned for {dayLabel(day, 'long')}</b>
+        <small>Add a plan, then tap it to see its details here.</small>
+      </div>
+    )
+  }
+  const leg = analysis.legs.find((l) => l.toId === b.id)
+  const from = leg && trip.blocks.find((x) => x.id === leg.fromId)
+  const to = ctx.loc(b)
+  const dir = to ? directionsUrl(from ? ctx.loc(from) : undefined, to, leg?.mode ?? trip.defaultMode, mapsApp) : undefined
+
+  return (
+    <div className="detail">
+      <div className="dh">
+        <b>{item.title}</b>
+        <small>{dayLabel(b.day)} · {clock(b.start)}–{clock(b.end)}</small>
+      </div>
+      <div className="db">
+        <BlockDetail id={b.id} analysis={analysis} onLeg={setOpenLeg} />
+      </div>
+      <div className="df">
+        {dir && <a className="btn-soft flex-1 dir" href={dir} target="_blank" rel="noreferrer" aria-label="Directions" title="Directions"><Navigation size={15} /><span>Directions</span></a>}
+        <button className="btn-soft flex-1" onClick={() => removeBlock(b.id)}><Undo2 size={15} /> Unschedule</button>
+        <button className="btn-soft flex-1" onClick={() => edit(item.id)}><Pencil size={15} /> Edit card</button>
+      </div>
+      {openLeg && <LegSheet leg={openLeg} onClose={() => setOpenLeg(null)} />}
+    </div>
+  )
+}
+
+type Aside = 'details' | 'ideas'
+
+/** The right-hand pane beside a day's plan on desk: the picked plan's details, or the ideas pool. */
 export function PlanAside() {
   const [show, setShow] = useState<Aside>(() => {
     try {
-      return (localStorage.getItem('hub-aside') as Aside) || 'map'
+      return localStorage.getItem('hub-aside') === 'ideas' ? 'ideas' : 'details'
     } catch {
-      return 'map'
+      return 'details'
     }
   })
   const pick = (a: Aside) => {
@@ -151,12 +199,12 @@ export function PlanAside() {
     }
   }
   return (
-    <section className="pane aside" aria-label={show === 'map' ? 'Map' : 'Ideas'}>
+    <section className="pane aside" aria-label={show === 'details' ? 'Details' : 'Ideas'}>
       <div className="ash">
-        <Segmented value={show} onChange={pick} options={[{ value: 'map', label: 'Map' }, { value: 'ideas', label: 'Ideas' }]} />
+        <Segmented value={show} onChange={pick} options={[{ value: 'details', label: 'Details' }, { value: 'ideas', label: 'Ideas' }]} />
       </div>
-      <div className={cx('ab', show === 'map' ? 'overflow-hidden' : 'overflow-y-auto')}>
-        {show === 'map' ? <MapView embedded /> : <IdeasView />}
+      <div className="ab overflow-y-auto">
+        {show === 'details' ? <DetailPane /> : <IdeasView />}
       </div>
     </section>
   )

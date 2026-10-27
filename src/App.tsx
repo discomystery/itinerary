@@ -1,7 +1,7 @@
 import { CalendarDays, Lightbulb, type LucideIcon, Map as MapIcon, Timer, Undo2, Users } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Avatar, cx, Mark } from './components/ui'
-import { PlanAside, Sidebar, TopTabs, UndoButton, WhoAmI } from './components/hub'
+import { DetailPane, PlanAside, Sidebar, TopTabs, UndoButton, WhoAmI } from './components/hub'
 import ItemEditor from './components/ItemEditor'
 import { type Tab, useStore } from './store'
 import { importFromHash } from './lib/share'
@@ -51,13 +51,15 @@ export default function App() {
   )
 
   if (layout !== 'phone') {
-    // Plan sits beside a map (tablet) or a Map/Ideas pane (desk); Ideas sits beside the map on desk.
-    const mapPane = (all: boolean) => (
+    // Plan sits beside the picked plan's details (and, on desk, the ideas pool); Ideas sits beside the map on desk.
+    const mapPane = () => (
       <section className="pane aside" aria-label="Map">
-        <div className="ab overflow-hidden"><MapView embedded defaultShow={all ? 'all' : 'day'} /></div>
+        <div className="ab overflow-hidden"><MapView embedded defaultShow="all" /></div>
       </section>
     )
-    const aside = tab === 'plan' ? (layout === 'desk' ? <PlanAside /> : mapPane(false)) : tab === 'ideas' && layout === 'desk' ? mapPane(true) : null
+    const aside = tab === 'plan'
+      ? layout === 'desk' ? <PlanAside /> : <section className="pane aside" aria-label="Details"><div className="ab overflow-y-auto"><DetailPane /></div></section>
+      : tab === 'ideas' && layout === 'desk' ? mapPane() : null
     return (
       <div className={cx('hub', `l-${layout}`)}>
         {layout === 'desk' ? (
@@ -76,7 +78,7 @@ export default function App() {
           <main ref={main} className={cx('pane', tab === 'map' ? 'overflow-hidden' : 'overflow-y-auto')}>
             {toast}
             {tab === 'now' && <NowView />}
-            {tab === 'plan' && <PlanView hideDays={layout === 'desk'} />}
+            {tab === 'plan' && <PlanView hideDays={layout === 'desk'} inspector />}
             {tab === 'map' && <MapView embedded={layout === 'desk'} />}
             {tab === 'ideas' && <IdeasView />}
             {tab === 'trip' && <TripView />}
