@@ -1,6 +1,7 @@
 import type { Anchor, Block, Interest, Item, LatLng, TransitMode, Trip } from '../types'
 import { daylight, openStatus } from './hours'
 import { distanceMeters, suggestMode, travelMinutes } from './transit'
+import { endLocation, flightIssues, flightSpan, isFlight } from './flights'
 import { utcToWall, wallToUtc } from './time'
 
 export const INTEREST_SCORE: Record<Interest, number> = { must: 3, yes: 1, meh: 0, no: -2 }
@@ -36,8 +37,9 @@ export function anchorInTrip(anchor: Anchor, tripTz: string): { day: string; min
   return utcToWall(tripTz, wallToUtc(anchor.tz, anchor.day, anchor.time))
 }
 
-/** Where to put a newly scheduled anchored item: first anchor → last anchor + typical. */
+/** Where to put a newly scheduled anchored item: first anchor → last anchor + typical (flights: takeoff → landing). */
 export function anchoredSlot(item: Item, tripTz: string): { day: string; start: number; end: number } | null {
+  if (isFlight(item)) return flightSpan(item.legs, tripTz)
   if (!item.anchors.length) return null
   const conv = item.anchors.map((a) => anchorInTrip(a, tripTz))
   const day = conv.map((c) => c.day).sort()[0]
@@ -51,6 +53,8 @@ export interface Ctx {
   trip: Trip
   item: (id: string) => Item | undefined
   loc: (b: Block) => LatLng | undefined
+  /** Where you are once the block is over (differs for flights). */
+  locEnd: (b: Block) => LatLng | undefined
   mode: (prev: Block, b: Block) => TransitMode
   travel: (prev: Block, b: Block, modeOverride?: TransitMode) => number
 }
@@ -59,19 +63,23 @@ export function makeCtx(trip: Trip): Ctx {
   const byId = new Map(trip.items.map((i) => [i.id, i]))
   const item = (id: string) => byId.get(id)
   const loc = (b: Block) => item(b.itemId)?.location
+  const locEnd = (b: Block) => {
+    const i = item(b.itemId)
+    return i && endLocation(i)
+  }
   const mode = (prev: Block, b: Block): TransitMode => {
     if (b.modeIn) return b.modeIn
-    const a = loc(prev)
+    const a = locEnd(prev)
     const z = loc(b)
     return a && z ? suggestMode(a, z, trip.defaultMode) : trip.defaultMode
   }
   const travel = (prev: Block, b: Block, modeOverride?: TransitMode) => {
-    const a = loc(prev)
+    const a = locEnd(prev)
     const z = loc(b)
     if (!a || !z) return 0
     return travelMinutes(a, z, modeOverride ?? mode(prev, b))
   }
-  return { trip, item, loc, mode, travel }
+  return { trip, item, loc, locEnd, mode, travel }
 }
 
 /** Latest acceptable arrival for a locked block: its first hard anchor inside it, else its start. */
@@ -91,7 +99,7 @@ function prevLocated(ctx: Ctx, sorted: Block[], idx: number): Block | undefined 
 
 export type Severity = 'error' | 'warn' | 'info'
 export interface Issue {
-  kind: 'closed' | 'partial' | 'overlap' | 'anchor' | 'tight' | 'dark' | 'short'
+  kind: 'closed' | 'partial' | 'overlap' | 'anchor' | 'tight' | 'dark' | 'short' | 'flight'
   severity: Severity
   message: string
 }
@@ -150,6 +158,8 @@ export function analyzeDay(trip: Trip, day: string, ctx: Ctx = makeCtx(trip)): D
       }
     }
 
+    if (isFlight(item)) for (const issue of flightIssues(item.legs, trip.timezone)) add(b.id, issue)
+
     if (b.end - b.start < item.duration.min) {
       add(b.id, { kind: 'short', severity: 'info', message: 'Shorter than the minimum time this needs' })
     }
@@ -174,7 +184,7 @@ export function analyzeDay(trip: Trip, day: string, ctx: Ctx = makeCtx(trip)): D
         toId: b.id,
         mode,
         minutes,
-        meters: distanceMeters(ctx.loc(prev)!, here),
+        meters: distanceMeters(ctx.locEnd(prev) ?? ctx.loc(prev)!, here),
         gap,
         tight,
       })

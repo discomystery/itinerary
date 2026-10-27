@@ -2,17 +2,19 @@ import { useState } from 'react'
 import { Circle, CircleMarker, MapContainer, TileLayer, useMapEvents } from 'react-leaflet'
 import { hoursError, hoursSummary } from '../lib/hours'
 import { searchPlaces, type PlaceHit } from '../lib/places'
-import { dayLabel, dayRange, fmtTime, parseHHMM, toHHMM } from '../lib/time'
+import { applyLegs, airport, flightIssues, flightSpan, layovers } from '../lib/flights'
+import { addDays, dayLabel, dayRange, fmtDuration, fmtTime, parseHHMM, toHHMM } from '../lib/time'
 import { uid, useStore } from '../store'
-import type { Anchor, Item, ItemType, LatLng } from '../types'
+import type { Anchor, FlightLeg, Item, ItemType, LatLng } from '../types'
 import { Clock, ExternalLink, Lock, Map as MapIcon, MapPin, Plus, Sun, X } from 'lucide-react'
+import { objectKind } from './objects'
 import { Avatar, cx, Field, InterestPicker, Sheet, TYPE_META } from './ui'
 
 const TZ_CHOICES = ['America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles', 'Europe/London', 'UTC']
 
 export default function ItemEditor({ id, onClose }: { id: string; onClose: () => void }) {
   const trip = useStore((s) => s.trip)
-  const { updateItem, deleteItem } = useStore()
+  const { updateItem, updateBlock, deleteItem } = useStore()
   const original = trip.items.find((i) => i.id === id)
   const [d, setD] = useState<Item | undefined>(original)
   if (!original || !d) return null
@@ -21,8 +23,17 @@ export default function ItemEditor({ id, onClose }: { id: string; onClose: () =>
   const herr = hoursError(d.hours)
   const blocks = trip.blocks.filter((b) => b.itemId === id)
 
+  const isPass = d.type === 'transport' && objectKind(d) === 'pass'
+
   const save = () => {
-    updateItem(id, d)
+    const legs = isPass && d.legs?.length ? d.legs : undefined
+    const next = legs || original.legs ? { ...d, ...applyLegs(d, legs ?? [], trip.timezone) } : d
+    updateItem(id, next)
+    // A flight's slot follows its legs.
+    if (legs) {
+      const span = flightSpan(legs, trip.timezone)
+      for (const b of blocks) updateBlock(b.id, span)
+    }
     onClose()
   }
 
@@ -118,7 +129,7 @@ export default function ItemEditor({ id, onClose }: { id: string; onClose: () =>
           </div>
         </Field>
 
-        <div>
+        {!(isPass && d.legs?.length) && <div>
           <div className="label mb-1.5">How long</div>
           <div className="grid grid-cols-3 gap-2">
             {(['min', 'typical', 'max'] as const).map((k) => (
@@ -128,14 +139,17 @@ export default function ItemEditor({ id, onClose }: { id: string; onClose: () =>
               </label>
             ))}
           </div>
-        </div>
+        </div>}
 
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={!!d.prefersDaylight} onChange={(e) => set({ prefersDaylight: e.target.checked })} />
           <Sun size={15} className="t-sub" /> Best while it's light out
         </label>
 
-        <AnchorEditor anchors={d.anchors} days={days} tripTz={trip.timezone} onChange={(anchors) => set({ anchors })} />
+        {isPass && <LegEditor legs={d.legs ?? []} day={d.anchors[0]?.day ?? trip.startDay} tripTz={trip.timezone} onChange={(legs) => set({ legs })} />}
+        {!(isPass && d.legs?.length) && (
+          <AnchorEditor anchors={d.anchors} days={days} tripTz={trip.timezone} onChange={(anchors) => set({ anchors })} />
+        )}
 
         <Field label="Tags" hint="Comma separated">
           <input className="input" value={d.tags.join(', ')} onChange={(e) => set({ tags: e.target.value.split(',').map((t) => t.trim().toLowerCase()).filter(Boolean) })} />
@@ -152,6 +166,79 @@ export default function ItemEditor({ id, onClose }: { id: string; onClose: () =>
         {d.url && <a className="inline-flex items-center gap-1 text-sm font-medium" style={{ color: 'var(--act)' }} href={d.url} target="_blank" rel="noreferrer">Open link <ExternalLink size={14} /></a>}
       </div>
     </Sheet>
+  )
+}
+
+function LegEditor({ legs, day, tripTz, onChange }: { legs: FlightLeg[]; day: string; tripTz: string; onChange: (l: FlightLeg[]) => void }) {
+  const upd = (id: string, p: Partial<FlightLeg>) => onChange(legs.map((l) => (l.id === id ? { ...l, ...p } : l)))
+  const lays = layovers(legs, tripTz)
+  const problems = flightIssues(legs, tripTz)
+  const add = () => {
+    const prev = legs.at(-1)
+    const at = prev ? { day: prev.arrive.day, time: prev.arrive.time + 90 } : { day, time: 9 * 60 }
+    const depart = { day: at.time >= 1440 ? addDays(at.day, 1) : at.day, time: at.time % 1440, tz: prev?.arrive.tz }
+    const lands = depart.time + 120
+    onChange([...legs, { id: uid('leg'), from: prev?.to ?? '', to: '', depart, arrive: { day: lands >= 1440 ? addDays(depart.day, 1) : depart.day, time: lands % 1440 } }])
+  }
+  return (
+    <div>
+      <div className="label mb-1.5">Flights</div>
+      <p className="mb-2 text-xs t-sub">
+        One row per flight, in local airport time. Add another for each connection and the layover is worked out for you.
+      </p>
+      <ul className="space-y-2">
+        {legs.map((l, i) => (
+          <li key={l.id} className="space-y-2">
+            <div className="panel space-y-1.5 p-2">
+              <div className="flex items-center gap-1.5">
+                <input className="input w-16 py-1 font-mono uppercase" placeholder="RDU" maxLength={4} value={l.from} onChange={(e) => upd(l.id, { from: e.target.value.toUpperCase() })} aria-label="From airport" />
+                <span className="t-sub">→</span>
+                <input className="input w-16 py-1 font-mono uppercase" placeholder="JFK" maxLength={4} value={l.to} onChange={(e) => upd(l.id, { to: e.target.value.toUpperCase() })} aria-label="To airport" />
+                <input className="input py-1" placeholder="Flight no." value={l.flightNo ?? ''} onChange={(e) => upd(l.id, { flightNo: e.target.value || undefined })} />
+                <button className="btn-ghost px-2" onClick={() => onChange(legs.filter((x) => x.id !== l.id))} aria-label="Remove"><X size={16} /></button>
+              </div>
+              {(['depart', 'arrive'] as const).map((end) => {
+                const code = end === 'depart' ? l.from : l.to
+                const t = l[end]
+                const known = airport(code)
+                const set = (p: Partial<FlightLeg['depart']>) => upd(l.id, { [end]: { ...t, ...p } })
+                return (
+                  <div key={end} className="flex flex-wrap items-center gap-1.5">
+                    <span className="w-12 text-xs t-sub">{end === 'depart' ? 'Leaves' : 'Lands'}</span>
+                    <input type="date" className="input w-auto py-1" value={t.day} onChange={(e) => e.target.value && set({ day: e.target.value })} />
+                    <input type="time" className="input w-auto py-1" value={toHHMM(t.time)} onChange={(e) => {
+                      const v = parseHHMM(e.target.value)
+                      if (v != null) set({ time: v })
+                    }} />
+                    {known && !t.tz ? (
+                      <span className="text-xs t-sub">{known.city} time</span>
+                    ) : (
+                      <select className="input w-auto py-1" value={t.tz ?? ''} onChange={(e) => set({ tz: e.target.value || undefined })}>
+                        <option value="">{known ? `${known.city} time` : `${tripTz.split('/')[1]} time`}</option>
+                        {[...new Set([tripTz, ...TZ_CHOICES, ...(t.tz ? [t.tz] : [])])].map((z) => <option key={z} value={z}>{z.split('/')[1]?.replace('_', ' ') ?? z} time</option>)}
+                      </select>
+                    )}
+                  </div>
+                )
+              })}
+              <div className="flex gap-1.5">
+                <input className="input py-1" placeholder="Seat" value={l.seat ?? ''} onChange={(e) => upd(l.id, { seat: e.target.value || undefined })} />
+                <input className="input py-1" placeholder="Confirmation" value={l.confirmation ?? ''} onChange={(e) => upd(l.id, { confirmation: e.target.value || undefined })} />
+              </div>
+            </div>
+            {lays[i] && (
+              <div className={cx('px-2 text-xs', lays[i].tight || lays[i].leaveFrom ? 'warnline' : 't-sub')}>
+                {lays[i].minutes < 0 ? 'Next flight leaves before this one lands' : `${fmtDuration(lays[i].minutes)} layover in ${lays[i].at}${lays[i].overnight ? ' (overnight)' : ''}`}
+              </div>
+            )}
+          </li>
+        ))}
+      </ul>
+      {problems.filter((p) => p.severity === 'error').map((p) => <p key={p.message} className="mt-1 text-xs" style={{ color: '#c8102e' }}>{p.message}</p>)}
+      <button className="btn-soft mt-2 py-1" onClick={add}>
+        <Plus size={14} /> {legs.length ? 'Add a connection' : 'Add flight times'}
+      </button>
+    </div>
   )
 }
 

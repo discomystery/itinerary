@@ -24,6 +24,7 @@ import {
 } from 'lucide-react'
 import type { CSSProperties, ReactNode } from 'react'
 import { hoursSummary, openSpans } from '../lib/hours'
+import { isFlight, via } from '../lib/flights'
 import { anchorOnDay, type Issue, worstSeverity } from '../lib/schedule'
 import { dayLabel, fmtDuration } from '../lib/time'
 import type { Block, Item, Person } from '../types'
@@ -119,6 +120,11 @@ export function defaultEyebrow(i: Item, day?: string, block?: Block, tz?: string
   if (k === 'resv') return i.tbd ? 'Not booked yet' : 'Reserved'
   if (k === 'note') return 'To-do'
   if (k === 'fare') return `Transit · ~${fmtDuration(i.duration.typical)}`
+  if (k === 'pass' && isFlight(i)) {
+    const stops = via(i.legs)
+    const nextDay = block && block.end >= 1440 ? ' · lands +1' : ''
+    return (stops.length ? `Flight · via ${stops.join(', ')}` : 'Flight · nonstop') + nextDay
+  }
   return KIND_WORD[k]
 }
 

@@ -9,9 +9,20 @@ import { analyzeDay, anchorOnDay, dayBlocks, interestScore, type Leg, makeCtx } 
 import { dayLabel, fmtDuration, toHHMM, wallToUtc } from '../lib/time'
 import { distanceMeters, fmtDistance, suggestMode, travelMinutes } from '../lib/transit'
 import { MODE_STYLE } from '../components/rail'
+import { flightStatus, isFlight } from '../lib/flights'
 import { useNow } from '../lib/useNow'
 import { ideas, itemById, useStore } from '../store'
-import type { Block, LatLng } from '../types'
+import type { Block, Item, LatLng } from '../types'
+
+/** "Now · 2h left", or for a flight, which leg you're on or how long the layover has left. */
+function nowEyebrow(item: Item, left: number, utc: number, tz: string): string {
+  if (isFlight(item)) {
+    const st = flightStatus(item.legs, utc, tz)
+    if (st.kind === 'leg') return `Now · ${st.leg.flightNo ? `${st.leg.flightNo} ` : ''}to ${st.leg.to.toUpperCase()} · lands in ${fmtDuration(st.minutesLeft)}`
+    if (st.kind === 'layover') return `Now · layover in ${st.layover.at} · boards in ~${fmtDuration(st.minutesLeft)}`
+  }
+  return `Now · ${fmtDuration(left)} left`
+}
 
 export default function NowView() {
   const trip = useStore((s) => s.trip)
@@ -28,7 +39,7 @@ export default function NowView() {
   const next = upcoming[0]
   const after = upcoming[1]
   const prevLoc = [...today].reverse().find((b) => b.start <= now.min && ctx.loc(b))
-  const here = (current && ctx.loc(current)) ?? (prevLoc && ctx.loc(prevLoc)) ?? trip.center
+  const here = (current && ctx.loc(current)) ?? (prevLoc && ctx.locEnd(prevLoc)) ?? trip.center
   const legTo = (b?: Block) => (b ? analysis.legs.find((l) => l.toId === b.id && l.minutes > 0) : undefined)
   const open = (b: Block) => {
     setDay(b.day)
@@ -73,7 +84,7 @@ export default function NowView() {
               block={current}
               tz={trip.timezone}
               issues={analysis.issues.get(current.id)}
-              eyebrow={`Now · ${fmtDuration(current.end - now.min)} left`}
+              eyebrow={nowEyebrow(itemById(trip, current.itemId)!, current.end - now.min, wallToUtc(trip.timezone, now.day, now.min), trip.timezone)}
               onClick={() => open(current)}
             />
           )}
