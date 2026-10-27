@@ -1,7 +1,7 @@
 import type { ItemType, LatLng } from '../types'
 
 // Turn whatever someone pasted (a friend's text, notes, a blog list, Google
-// Maps links) into rough ideas. Each line is one idea; anything we can't
+// or Apple Maps links) into rough ideas. Each line is one idea; anything we can't
 // understand stays in the title or notes for a human to fix during review.
 
 export interface ParsedLine {
@@ -13,7 +13,7 @@ export interface ParsedLine {
   type: ItemType
   /** Weekday the person mentioned, 0 = Sunday. */
   weekday?: number
-  /** Coordinates taken straight from a Google Maps link. */
+  /** Coordinates taken straight from a Google or Apple Maps link. */
   location?: LatLng
 }
 
@@ -50,7 +50,13 @@ const HINTS: [RegExp, { tag?: string; type?: ItemType }][] = [
   [words('flight', 'train to', 'ferry to', 'bus to'), { type: 'transport' }],
 ]
 
-/** Pull a place name (and maybe coordinates) out of a Google Maps link. */
+const LL = /^\s*(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)\s*$/
+const toLatLng = (v: string | null): LatLng | undefined => {
+  const m = v ? LL.exec(v) : null
+  return m ? { lat: Number(m[1]), lng: Number(m[2]) } : undefined
+}
+
+/** Pull a place name (and maybe coordinates) out of a Google or Apple Maps link. */
 export function parseMapsUrl(url: string): { name?: string; location?: LatLng } | null {
   let u: URL
   try {
@@ -58,17 +64,33 @@ export function parseMapsUrl(url: string): { name?: string; location?: LatLng } 
   } catch {
     return null
   }
+  if (u.hostname === 'maps.apple.com' || u.hostname === 'maps.apple') return parseAppleMapsUrl(u)
   if (!/(^|\.)google\.[a-z.]+$/.test(u.hostname) || !u.pathname.startsWith('/maps')) return null
   const out: { name?: string; location?: LatLng } = {}
   const place = /\/maps\/place\/([^/]+)/.exec(u.pathname)
   if (place) out.name = decodeURIComponent(place[1].replace(/\+/g, ' '))
   const q = u.searchParams.get('q') ?? u.searchParams.get('query')
-  if (!out.name && q && !/^-?\d+(\.\d+)?,\s*-?\d+(\.\d+)?$/.test(q)) out.name = q
+  if (!out.name && q && !LL.test(q)) out.name = q
   // Prefer the place's own pin (!3d lat !4d lng) over the map view (@lat,lng).
   const pin = /!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/.exec(url)
   const view = /@(-?\d+\.\d+),(-?\d+\.\d+)/.exec(url)
   const ll = pin ?? view
   if (ll) out.location = { lat: Number(ll[1]), lng: Number(ll[2]) }
+  return out
+}
+
+// Apple Maps shares two shapes: the classic `maps.apple.com/?ll=…&q=Name`
+// and the newer `maps.apple.com/place?coordinate=…&name=Name`. Short
+// `maps.apple/p/…` links carry nothing we can read without following them.
+function parseAppleMapsUrl(u: URL): { name?: string; location?: LatLng } {
+  const p = u.searchParams
+  const out: { name?: string; location?: LatLng } = {}
+  const name = p.get('name') ?? p.get('q')
+  if (name && !LL.test(name)) out.name = name
+  else if (p.get('address')) out.name = p.get('address')!
+  // `sll` is only the search's map center, so it's the last resort.
+  out.location = toLatLng(p.get('coordinate')) ?? toLatLng(p.get('ll')) ?? toLatLng(p.get('daddr')) ?? toLatLng(name) ?? toLatLng(p.get('sll'))
+  if (!out.location) delete out.location
   return out
 }
 
