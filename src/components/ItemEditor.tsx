@@ -9,6 +9,7 @@ import { uid, useStore } from '../store'
 import type { Anchor, CardKind, FlightLeg, Item, LatLng } from '../types'
 import { Clock, ExternalLink, Lock, Map as MapIcon, MapPin, Plus, Sun, X } from 'lucide-react'
 import { cardKind, det, fieldsFor, KIND_ORDER, KINDS, variantOf } from '../lib/cards'
+import { currencyOf } from '../lib/costs'
 import { glyphFor, ObjectCard } from './objects'
 import { Avatar, cx, Field, InterestPicker, Sheet } from './ui'
 
@@ -148,6 +149,28 @@ export default function ItemEditor({ id, onClose }: { id: string; onClose: () =>
             ))}
           </div>
         </div>}
+
+        <Field label={`Cost (${currencyOf(trip)})`} hint="Optional. Adds up on the Trip tab and under each day.">
+          <div className="flex gap-2">
+            <input
+              className="input"
+              type="number"
+              inputMode="decimal"
+              min={0}
+              step="any"
+              placeholder="—"
+              value={d.cost?.amount ?? ''}
+              onChange={(e) => {
+                const amount = Number(e.target.value)
+                set({ cost: e.target.value && amount > 0 ? { amount, per: d.cost?.per ?? 'person' } : undefined })
+              }}
+            />
+            <select className="input w-auto" value={d.cost?.per ?? 'person'} onChange={(e) => d.cost && set({ cost: { ...d.cost, per: e.target.value as 'person' | 'group' } })} aria-label="Who pays">
+              <option value="person">each</option>
+              <option value="group">for the group</option>
+            </select>
+          </div>
+        </Field>
 
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={!!d.prefersDaylight} onChange={(e) => set({ prefersDaylight: e.target.checked })} />

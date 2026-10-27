@@ -1,8 +1,10 @@
-import { BookUser, Download, Link2, Pencil, Plus, Share, ShieldCheck, Stamp, Star, Upload, UserPlus, Wallet, X } from 'lucide-react'
-import { type ReactNode, useRef, useState } from 'react'
+import { BookUser, CalendarPlus, Download, Link2, Pencil, Plus, Share, ShieldCheck, Stamp, Star, Upload, UserPlus, Wallet, X } from 'lucide-react'
+import { type ReactNode, useMemo, useRef, useState } from 'react'
 import { MODE_STYLE } from '../components/rail'
 import { Avatar, Field, Sheet, ViewHeader } from '../components/ui'
 import { helsinkiTrip } from '../data/helsinki'
+import { CURRENCIES, currencyOf, fmtMoney, tripCosts } from '../lib/costs'
+import { downloadCalendar } from '../lib/ics'
 import { downloadTrip, parseTrip, shareLink } from '../lib/share'
 import { dayLabel, dayRange, wallToUtc } from '../lib/time'
 import { MAPS_APP_NAME, type MapsApp, MODES } from '../lib/transit'
@@ -118,6 +120,9 @@ export default function TripView() {
           </form>
         </div>
 
+        <div className="sl"><span>Costs</span><span>What's planned so far</span></div>
+        <CostPanel trip={trip} onCurrency={(currency) => set({ currency })} />
+
         <div className="sl"><span>Travel documents</span><span>Never on the plan</span></div>
         <DocWallet docs={trip.docs ?? []} onOpen={setDoc} onAdd={(kind) => setDoc({ id: uid('d'), kind, label: DOC_META[kind].label })} />
 
@@ -126,6 +131,7 @@ export default function TripView() {
           <button className="pri" onClick={share}><Link2 />Share link</button>
           <button onClick={() => downloadTrip(trip)}><Download />Export</button>
           <button onClick={() => file.current?.click()}><Upload />Import</button>
+          <button onClick={() => downloadCalendar(trip)} disabled={!trip.blocks.length}><CalendarPlus />Calendar</button>
         </div>
         <input
           ref={file}
@@ -145,7 +151,7 @@ export default function TripView() {
           }}
         />
         {msg && <p className="text-sm" style={{ color: '#15803d' }}>{msg}</p>}
-        <p className="text-xs t-sub">Whoever opens a link or file gets their own copy. Live sync comes later.</p>
+        <p className="text-xs t-sub">Whoever opens a link or file gets their own copy. Live sync comes later. Calendar adds every plan to your phone's calendar; add it again after plans change.</p>
 
         <button
           className="pn trow"
@@ -176,6 +182,37 @@ export default function TripView() {
           }}
         />
       )}
+    </div>
+  )
+}
+
+function CostPanel({ trip, onCurrency }: { trip: Trip; onCurrency: (c: string) => void }) {
+  const c = useMemo(() => tripCosts(trip), [trip])
+  const cur = currencyOf(trip)
+  const $ = (n: number) => fmtMoney(n, cur)
+  const days = Object.keys(c.byDay).sort()
+  return (
+    <div className="pn costs">
+      <div className="facts">
+        <div><span className="k3">Each</span><span className="v3">{$(c.each)}</span></div>
+        <div><span className="k3">Group</span><span className="v3">{$(c.total)}</span></div>
+        <label>
+          <span className="k3">Currency</span>
+          <select className="v3" value={cur} onChange={(e) => onCurrency(e.target.value)} aria-label="Currency">
+            {[...new Set([cur, ...CURRENCIES])].map((x) => <option key={x}>{x}</option>)}
+          </select>
+        </label>
+      </div>
+      {days.length > 0 && (
+        <ul className="cdays">
+          {days.map((d) => <li key={d}><span>{dayLabel(d)}</span><span>{$(c.byDay[d].each)} each</span></li>)}
+        </ul>
+      )}
+      <p className="text-xs t-sub">
+        {c.ideas.count > 0
+          ? `Plus ${$(c.ideas.each)} each in ${c.ideas.count} idea${c.ideas.count === 1 ? '' : 's'} not on the plan yet.`
+          : days.length ? 'Each plan counts once, on its first day.' : 'Add a cost to any card and it adds up here.'}
+      </p>
     </div>
   )
 }

@@ -80,6 +80,8 @@ export interface Item {
   checklist?: CheckItem[]
   /** Day a postcard was stamped visited. */
   visited?: string
+  /** Planned price, in the trip's currency. */
+  cost?: Cost
   /** Flights: one entry per leg, in order. Connections are worked out from these. */
   legs?: FlightLeg[]
 }
@@ -103,6 +105,12 @@ export interface FlightLeg {
   arrive: LocalTime
   seat?: string
   confirmation?: string
+}
+
+export interface Cost {
+  amount: number
+  /** Each person pays `amount`, or the group pays it once between them. */
+  per: 'person' | 'group'
 }
 
 export type DocKind = 'passport' | 'entry' | 'insurance' | 'loyalty' | 'other'
@@ -164,4 +172,6 @@ export interface Trip {
   blocks: Block[]
   defaultMode: TransitMode
   docs?: TravelDoc[]
+  /** ISO 4217 code for prices, e.g. "EUR". */
+  currency?: string
 }

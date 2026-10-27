@@ -166,9 +166,11 @@ export const useStore = create<State>()(
     },
     {
       name: 'itinerary-v1',
-      version: 2,
+      version: 3,
       migrate: (state, version) => {
         const s = state as { trip?: Trip }
+        // v3: prices. The Helsinki sample is in euros.
+        if (version < 3 && s.trip?.id === 't-helsinki' && !s.trip.currency) s.trip.currency = 'EUR'
         // v2: stays run check in → check out so they show on the days between.
         const stay = s.trip?.items.find((i) => i.id === 'i-stay')
         if (version < 2 && stay && !stay.anchors.length) {

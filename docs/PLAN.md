@@ -135,7 +135,24 @@ The app is **Papermap**: old-school travel paper is the design language.
 - Until a route loads (or if it fails, or you're offline) the estimate is used
   and the sheet marks it with ~.
 
-## Live departures (v1.5)
+## Small layers (v1.5)
+
+- **Weather** under each day's title on Plan, and in the Now header: the
+  Open-Meteo forecast within 16 days, otherwise "Typically…" from the same
+  dates over the last five years. Free, no key; cached on the device for 3h.
+  °F for US English, °C elsewhere.
+- **Add to calendar**: Trip → Calendar downloads an .ics of every plan; a
+  plan's More menu adds just that one. Times are in UTC, with the address, pin,
+  card details and notes. It's a snapshot, so add it again after changes.
+- **Print**: the printer on Plan prints this day or the whole trip as a plain
+  itinerary (times, leave-by, addresses, seats and confirmations, notes,
+  warnings). "Save as PDF" makes an offline copy.
+- **Costs**: an optional price on any card, per person or for the group, in
+  the trip's currency. Totals per day (under the day title) and for the trip
+  (Trip → Costs). Each idea counts once, on its first scheduled day; a plan
+  with `who` splits between just those people.
+
+## Live departures (v1.6)
 
 - **Now**: within 45 minutes of leaving on transit, the route card swaps the
   timetable for live departures from Transitous, refreshed every minute: the
