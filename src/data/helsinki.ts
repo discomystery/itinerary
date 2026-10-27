@@ -295,6 +295,7 @@ export const helsinkiBlocks: Block[] = [
 export function helsinkiTrip(): Trip {
   return {
     id: 't-helsinki',
+    currency: 'EUR',
     name: 'Helsinki: NHL Global Series',
     startDay: '2026-11-10',
     endDay: '2026-11-16',
