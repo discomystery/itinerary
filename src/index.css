@@ -670,7 +670,7 @@ button.o:active { transform: scale(0.99); }
 .hub .panes > main { flex: 1; }
 .hub .aside { flex: none; width: clamp(360px, 34vw, 520px); display: flex; flex-direction: column; background: var(--chrome); box-shadow: inset 1px 0 0 var(--line); }
 .hub .aside .ab { flex: 1; min-height: 0; position: relative; }
-.hub .aside.detailp { width: clamp(380px, 32vw, 480px); box-shadow: -1px 0 0 var(--line), -16px 0 32px -20px rgb(20 26 34 / 0.35); z-index: 30; }
+.hub .aside.detailp { width: clamp(420px, 36vw, 560px); box-shadow: -1px 0 0 var(--line), -16px 0 32px -20px rgb(20 26 34 / 0.35); z-index: 30; }
 .hub .aside.over { position: absolute; right: 0; top: 0; bottom: 0; z-index: 40; width: min(420px, 62%); box-shadow: -1px 0 0 var(--line), -24px 0 48px -24px rgb(20 26 34 / 0.45); }
 /* Roomier margins, and content held to a readable width on wide screens. */
 .hub main .vh, .hub main .desk { padding-inline: max(24px, calc((100% - 720px) / 2)); }
@@ -727,7 +727,7 @@ button.o:active { transform: scale(0.99); }
 .detail .dh b { font-size: 17px; font-weight: 700; letter-spacing: -0.01em; }
 .detail .dh small { font: 600 13px/1.3 var(--mono); color: var(--ink); }
 /* The stage: a dark, spot-lit mat so the paper card reads as an object, not a panel. */
-.detail .stage { position: relative; padding: 40px 28px 48px; background: radial-gradient(120% 90% at 50% 18%, var(--stage-lit), var(--stage) 72%); box-shadow: inset 0 1px 0 rgb(0 0 0 / 0.25), inset 0 -1px 0 rgb(255 255 255 / 0.04); }
+.detail .stage { position: relative; padding: 32px 16px 40px; background: radial-gradient(120% 90% at 50% 18%, var(--stage-lit), var(--stage) 72%); box-shadow: inset 0 1px 0 rgb(0 0 0 / 0.25), inset 0 -1px 0 rgb(255 255 255 / 0.04); }
 .detail .stage.grow { flex: 1; }
 /* A not-yet-booked card is see-through on the board; on the stage it needs its paper. */
 .detail .hero > .o.open-resv { background: var(--chrome); }
@@ -736,7 +736,9 @@ button.o:active { transform: scale(0.99); }
 /* At rest the card sits square so its dates and times read cleanly; it only tips as it lands. */
 @media (hover: hover) { .detail .hero:hover { transform: translateY(-3px); } }
 .detail .hero > .o { --lift: 0 2px 0 rgb(0 0 0 / 0.18), 0 34px 48px -22px rgb(0 0 0 / 0.75), 0 10px 18px -10px rgb(0 0 0 / 0.5); }
-.l-desk .detail .hero { zoom: 1.16; }
+/* Big enough to read across the room: the card scales up inside the stage's width. */
+.detail .hero { zoom: 1.12; }
+.l-desk .detail .hero { zoom: 1.32; }
 @keyframes settle { from { opacity: 0; transform: translateY(14px) rotate(1.5deg) scale(0.96); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .detail .hero { animation: none; } }
 .detail .db { flex: 1; display: flex; flex-direction: column; }
