@@ -26,6 +26,9 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run build
+        env:
+          # Optional: real HSL timetables in Helsinki. Without it, Transitous is used.
+          VITE_DIGITRANSIT_KEY: ${{ secrets.DIGITRANSIT_KEY }}
       - uses: actions/configure-pages@v6
       - uses: actions/upload-pages-artifact@v4
         with:
