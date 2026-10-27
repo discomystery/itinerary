@@ -92,6 +92,7 @@ export default function PlanView() {
             day={day}
             analysis={analysis}
             unfolded={unfolded}
+            selected={null}
             onToggle={(id) => setUnfolded(unfolded === id ? null : id)}
             onEdit={setOpenBlock}
             onMore={setMore}
@@ -140,11 +141,12 @@ function DayStrip({ days, day, setDay, analyses }: {
 
 type Row = { key: string; t: number; node: ReactNode; mode?: TransitMode; isLeg?: boolean }
 
-function ListView({ trip, day, analysis, unfolded, onToggle, onEdit, onMore, onLeg, onAdd }: {
+export function ListView({ trip, day, analysis, unfolded, selected, onToggle, onEdit, onMore, onLeg, onAdd }: {
   trip: Trip
   day: string
   analysis: DayAnalysis
   unfolded: string | null
+  selected: string | null
   onToggle: (id: string) => void
   onEdit: (id: string) => void
   onMore: (id: string) => void
@@ -167,6 +169,8 @@ function ListView({ trip, day, analysis, unfolded, onToggle, onEdit, onMore, onL
     )
   }
 
+  // Beside a details pane, ring the plan it shows. The ring sits on a wrapper because ticket notches clip the card.
+  const pick = (id: string, card: ReactNode) => (selected == null ? card : <div className={cx('pick', selected === id && 'sel')}>{card}</div>)
   const rows: Row[] = []
   blocks.forEach((b, i) => {
     const item = itemById(trip, b.itemId)
@@ -179,7 +183,8 @@ function ListView({ trip, day, analysis, unfolded, onToggle, onEdit, onMore, onL
     rows.push({
       key: b.id,
       t: b.start,
-      node: (
+      node: pick(
+        b.id,
         <ObjectCard
           item={item}
           block={b}
@@ -197,7 +202,7 @@ function ListView({ trip, day, analysis, unfolded, onToggle, onEdit, onMore, onL
               </>
             )
           }
-        />
+        />,
       ),
     })
     const next = blocks[i + 1]
@@ -229,7 +234,7 @@ function ListView({ trip, day, analysis, unfolded, onToggle, onEdit, onMore, onL
 /* ------------------------------ Day view ------------------------------- */
 
 /** Greedy column layout so overlapping blocks (e.g. a group split) sit side by side. */
-function columns(blocks: Block[]): Map<string, { col: number; cols: number }> {
+export function columns(blocks: Block[]): Map<string, { col: number; cols: number }> {
   const out = new Map<string, { col: number; cols: number }>()
   let cluster: Block[] = []
   let clusterEnd = -Infinity
@@ -422,7 +427,7 @@ function DayView({ trip, day, analysis, onEmpty, onOpen, onLeg }: {
 
 /* ------------------------------- Sheets -------------------------------- */
 
-function AddSheet({ trip, day, at, onClose }: { trip: Trip; day: string; at: number | null; onClose: () => void }) {
+export function AddSheet({ trip, day, at, onClose }: { trip: Trip; day: string; at: number | null; onClose: () => void }) {
   const addBlock = useStore((s) => s.addBlock)
   const edit = useStore((s) => s.edit)
   const addItem = useStore((s) => s.addItem)
@@ -499,18 +504,10 @@ function AddSheet({ trip, day, at, onClose }: { trip: Trip; day: string; at: num
 
 function BlockSheet({ id, analysis, onClose, onLeg }: { id: string; analysis: DayAnalysis; onClose: () => void; onLeg: (l: Leg) => void }) {
   const trip = useStore((s) => s.trip)
-  const { updateBlock, removeBlock, edit } = useStore()
+  const { removeBlock, edit } = useStore()
   const b = trip.blocks.find((x) => x.id === id)
   const item = b && itemById(trip, b.itemId)
   if (!b || !item) return null
-  const days = dayRange(trip.startDay, trip.endDay)
-  const shift = (m: number) => updateBlock(b.id, { start: b.start + m, end: b.end + m })
-  const leg = analysis.legs.find((l) => l.toId === b.id)
-  const from = leg && itemById(trip, trip.blocks.find((x) => x.id === leg.fromId)?.itemId ?? '')
-  const hours = hoursSummary(item.hours, b.day, clock)
-  const cost = costOf(trip, item, b)
-  const M = leg ? MODE_STYLE[leg.mode] : null
-
   return (
     <Sheet
       open
@@ -523,8 +520,30 @@ function BlockSheet({ id, analysis, onClose, onLeg }: { id: string; analysis: Da
         </div>
       }
     >
+      <BlockDetail id={id} analysis={analysis} onLeg={onLeg} onEdit={onClose} />
+    </Sheet>
+  )
+}
+
+/** A plan in full: its card, issues, when, getting there and facts. Shown in a sheet, or the details pane. */
+/** `card={false}` leaves the card out, for a pane that shows it on its own stage. */
+export function BlockDetail({ id, analysis, onLeg, onEdit, card = true }: { id: string; analysis: DayAnalysis; onLeg: (l: Leg) => void; onEdit?: () => void; card?: boolean }) {
+  const trip = useStore((s) => s.trip)
+  const { updateBlock, edit } = useStore()
+  const b = trip.blocks.find((x) => x.id === id)
+  const item = b && itemById(trip, b.itemId)
+  if (!b || !item) return null
+  const days = dayRange(trip.startDay, trip.endDay)
+  const shift = (m: number) => updateBlock(b.id, { start: b.start + m, end: b.end + m })
+  const leg = analysis.legs.find((l) => l.toId === b.id)
+  const from = leg && itemById(trip, trip.blocks.find((x) => x.id === leg.fromId)?.itemId ?? '')
+  const hours = hoursSummary(item.hours, b.day, clock)
+  const cost = costOf(trip, item, b)
+  const M = leg ? MODE_STYLE[leg.mode] : null
+
+  return (
       <div className="sheetdesk">
-        <ObjectCard item={item} block={b} tz={trip.timezone} open onEdit={() => { onClose(); edit(item.id) }} />
+        {card && <ObjectCard item={item} block={b} tz={trip.timezone} open onEdit={() => { onEdit?.(); edit(item.id) }} />}
         <IssueList issues={analysis.issues.get(b.id)} />
         <div className="pn">
           <div className="sl" style={{ margin: '0 0 8px' }}><span>When</span><span>{fmtDuration(b.end - b.start)} · usually {fmtDuration(item.duration.typical)}</span></div>
@@ -589,7 +608,6 @@ function BlockSheet({ id, analysis, onClose, onLeg }: { id: string; analysis: Da
           </div>
         )}
       </div>
-    </Sheet>
   )
 }
 

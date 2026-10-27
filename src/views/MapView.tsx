@@ -33,16 +33,28 @@ function FitTo({ points }: { points: LatLng[] }) {
   return null
 }
 
+/** Leaflet only measures on load, so re-measure when a pane resizes. */
+function FollowSize() {
+  const map = useMap()
+  useEffect(() => {
+    const ro = new ResizeObserver(() => map.invalidateSize())
+    ro.observe(map.getContainer())
+    return () => ro.disconnect()
+  }, [map])
+  return null
+}
+
 const numIcon = (n: number, color: string) =>
   L.divIcon({ className: '', html: `<div class="num-pin" style="background:${color};width:24px;height:24px">${n}</div>`, iconSize: [24, 24], iconAnchor: [12, 12] })
 
-export default function MapView() {
+/** `embedded` drops the day buttons where the day is picked elsewhere on screen. */
+export default function MapView({ embedded = false, defaultShow = 'day' }: { embedded?: boolean; defaultShow?: Show }) {
   const trip = useStore((s) => s.trip)
   const day = useStore((s) => s.day)
   const viewer = useStore((s) => s.viewer)
   const mapsApp = useStore((s) => s.mapsApp)
   const { setDay, setInterest, edit } = useStore()
-  const [show, setShow] = useState<Show>('day')
+  const [show, setShow] = useState<Show>(defaultShow)
   const [colorBy, setColorBy] = useState<ColorBy>('type')
   const days = dayRange(trip.startDay, trip.endDay)
 
@@ -75,6 +87,7 @@ export default function MapView() {
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
         <FitTo points={fitPoints} />
+        <FollowSize />
         {others.map((i) =>
           i.type === 'area' ? (
             <Circle key={i.id} center={[i.location!.lat, i.location!.lng]} radius={i.areaRadius ?? 400} pathOptions={{ color: color(i), dashArray: '6 6', weight: 2, fillOpacity: 0.08 }}>
@@ -109,14 +122,14 @@ export default function MapView() {
           <div className="chrome rounded-lg shadow"><Segmented value={show} onChange={setShow} options={[{ value: 'day', label: 'Day route' }, { value: 'all', label: 'Everything' }]} /></div>
           <div className="chrome rounded-lg shadow"><Segmented value={colorBy} onChange={setColorBy} options={[{ value: 'type', label: 'Kind' }, { value: 'interest', label: <><Flame size={13} /> Interest</> }]} /></div>
         </div>
-        <div className="pointer-events-auto flex gap-1 overflow-x-auto">
+        {!embedded && <div className="pointer-events-auto flex gap-1 overflow-x-auto">
           {days.map((d) => (
             <button key={d} onClick={() => setDay(d)} className="shrink-0 rounded-md px-2 py-1 text-xs font-medium shadow"
               style={d === day ? { background: 'var(--ink)', color: 'var(--chrome)' } : { background: 'var(--chrome)' }}>
               {dayLabel(d)}
             </button>
           ))}
-        </div>
+        </div>}
       </div>
       {show === 'day' && route.length === 0 && (
         <div className="chrome absolute inset-x-0 bottom-3 z-[500] mx-auto w-fit rounded-lg px-3 py-2 text-sm shadow">Nothing with a location on {dayLabel(day)} yet</div>
