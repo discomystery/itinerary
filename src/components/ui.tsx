@@ -32,7 +32,7 @@ export const INTEREST_META: Record<Interest, { Icon: LucideIcon; label: string; 
   must: { Icon: Heart, label: 'Must do', color: '#c8102e' },
   yes: { Icon: ThumbsUp, label: 'Interested', color: '#1f5fbf' },
   meh: { Icon: Meh, label: 'Meh', color: '#8a8f99' },
-  no: { Icon: ThumbsDown, label: 'Skip', color: '#5a6371' },
+  no: { Icon: ThumbsDown, label: 'Pass', color: '#5a6371' },
 }
 export const INTERESTS: Interest[] = ['must', 'yes', 'meh', 'no']
 

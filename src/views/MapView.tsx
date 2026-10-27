@@ -7,7 +7,7 @@ import { InterestPicker, Segmented, TYPE_META, VoteList } from '../components/ui
 import { hoursSummary } from '../lib/hours'
 import { dayBlocks, interestScore } from '../lib/schedule'
 import { dayLabel, dayRange } from '../lib/time'
-import { useStore } from '../store'
+import { ideas, useStore } from '../store'
 import type { Item, LatLng } from '../types'
 
 type Show = 'day' | 'all'
@@ -46,7 +46,7 @@ export default function MapView() {
 
   const route = useMemo(() => dayBlocks(trip, day).map((b) => ({ b, item: trip.items.find((i) => i.id === b.itemId)! })).filter((x) => x.item?.location), [trip, day])
   const routeIds = new Set(route.map((r) => r.item.id))
-  const located = trip.items.filter((i) => i.location)
+  const located = ideas(trip).filter((i) => i.location)
   const others = show === 'all' ? located.filter((i) => !routeIds.has(i.id)) : []
   const color = (i: Item) => (colorBy === 'type' ? TYPE_META[i.type].color : heat(interestScore(i), trip.people.length))
   const fitPoints = (show === 'day' && route.length ? route.map((r) => r.item.location!) : located.map((i) => i.location!))

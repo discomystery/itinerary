@@ -1,16 +1,9 @@
-import type { LatLng } from '../types'
+import type { LatLng, PlaceMatch as PlaceHit } from '../types'
 
 // Place search via OpenStreetMap's Nominatim (free, no key). Its usage policy
 // asks for at most ~1 request/second, so we only search on submit.
 
-export interface PlaceHit {
-  name: string
-  address: string
-  lat: number
-  lng: number
-  hours?: string
-  website?: string
-}
+export type { PlaceHit }
 
 interface NominatimResult {
   lat: string
@@ -20,15 +13,15 @@ interface NominatimResult {
   extratags?: Record<string, string> | null
 }
 
-export async function searchPlaces(q: string, near: LatLng): Promise<PlaceHit[]> {
+export async function searchPlaces(q: string, near: LatLng, opts: { bounded?: boolean; limit?: number } = {}): Promise<PlaceHit[]> {
   const d = 0.35
   const params = new URLSearchParams({
     q,
     format: 'jsonv2',
     extratags: '1',
-    limit: '8',
+    limit: String(opts.limit ?? 8),
     viewbox: `${near.lng - d},${near.lat + d},${near.lng + d},${near.lat - d}`,
-    bounded: '0',
+    bounded: opts.bounded ? '1' : '0',
   })
   const res = await fetch(`https://nominatim.openstreetmap.org/search?${params}`, {
     headers: { 'Accept-Language': 'en' },

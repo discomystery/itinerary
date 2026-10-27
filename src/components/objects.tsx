@@ -92,6 +92,8 @@ function placeWord(i: Item): string {
   if (has(i, 'sights')) return 'Sight'
   if (has(i, 'architecture')) return 'Architecture'
   if (has(i, 'shopping')) return 'Shopping'
+  if (has(i, 'nightlife')) return 'Nightlife'
+  if (has(i, 'outdoors')) return 'Outdoors'
   return 'Place'
 }
 

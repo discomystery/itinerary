@@ -30,7 +30,11 @@ interface State {
   undo: () => void
 
   addItem: (p: Partial<Item>) => Id
+  /** Add many ideas as one undo step. */
+  addItems: (ps: Partial<Item>[]) => Id[]
   updateItem: (id: Id, p: Partial<Item>) => void
+  /** Background updates (place lookups) that shouldn't land on the undo stack. */
+  quietUpdateItem: (id: Id, p: Partial<Item>) => void
   deleteItem: (id: Id) => void
   setInterest: (itemId: Id, personId: Id, v: Interest | null) => void
 
@@ -89,7 +93,24 @@ export const useStore = create<State>()(
           mutate((t) => ({ ...t, items: [...t.items, item] }))
           return id
         },
+        addItems: (ps) => {
+          const now = Date.now()
+          const items: Item[] = ps.map((p, n) => ({
+            id: uid('i'),
+            title: 'New idea',
+            type: 'place',
+            anchors: [],
+            duration: { min: 30, typical: 60, max: 120 },
+            interest: {},
+            tags: [],
+            createdAt: now + n,
+            ...p,
+          }))
+          mutate((t) => ({ ...t, items: [...t.items, ...items] }))
+          return items.map((i) => i.id)
+        },
         updateItem: (id, p) => mutate((t) => ({ ...t, items: t.items.map((i) => (i.id === id ? { ...i, ...p } : i)) })),
+        quietUpdateItem: (id, p) => set((s) => ({ trip: { ...s.trip, items: s.trip.items.map((i) => (i.id === id ? { ...i, ...p } : i)) } })),
         deleteItem: (id) =>
           mutate((t) => ({ ...t, items: t.items.filter((i) => i.id !== id), blocks: t.blocks.filter((b) => b.itemId !== id) })),
         setInterest: (itemId, personId, v) =>
@@ -145,6 +166,15 @@ export const useStore = create<State>()(
 
 export function useTrip() {
   return useStore((s) => s.trip)
+}
+
+/** Ideas that are part of the trip (not still waiting in the Inbox). */
+export function ideas(trip: Trip) {
+  return trip.items.filter((i) => !i.inbox)
+}
+
+export function inboxItems(trip: Trip) {
+  return trip.items.filter((i) => i.inbox).sort((a, b) => a.createdAt - b.createdAt)
 }
 
 export function itemById(trip: Trip, id: Id) {

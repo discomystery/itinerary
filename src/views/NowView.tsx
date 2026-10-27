@@ -10,7 +10,7 @@ import { dayLabel, fmtDuration, toHHMM, wallToUtc } from '../lib/time'
 import { distanceMeters, fmtDistance, suggestMode, travelMinutes } from '../lib/transit'
 import { MODE_STYLE } from '../components/rail'
 import { useNow } from '../lib/useNow'
-import { itemById, useStore } from '../store'
+import { ideas, itemById, useStore } from '../store'
 import type { Block, LatLng } from '../types'
 
 export default function NowView() {
@@ -248,7 +248,7 @@ function OpenNearby({ here, day, now }: { here: LatLng; day: string; now: number
   const free = nextStart - now
   const onToday = new Set(today.map((b) => b.itemId))
 
-  const list = trip.items
+  const list = ideas(trip)
     .filter((i) => i.location && !onToday.has(i.id) && i.type !== 'transport' && !i.anchors.length)
     .map((i) => {
       const mode = suggestMode(here, i.location!, trip.defaultMode)

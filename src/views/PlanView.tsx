@@ -7,7 +7,7 @@ import { daylight, hoursSummary, openSpans, openStatus } from '../lib/hours'
 import { type DayAnalysis, type Leg, analyzeDay, anchorOnDay, anchoredSlot, findSlot, interestScore, worstSeverity } from '../lib/schedule'
 import { dayLabel, dayRange, fmtDuration, parseHHMM, snap, toHHMM } from '../lib/time'
 import { useNow } from '../lib/useNow'
-import { itemById, useStore } from '../store'
+import { ideas, itemById, useStore } from '../store'
 import type { Block, Item, TransitMode, Trip } from '../types'
 
 const PX = 1.1 // pixels per minute in the Day view
@@ -376,7 +376,7 @@ function AddSheet({ trip, day, at, onClose }: { trip: Trip; day: string; at: num
   const [q, setQ] = useState('')
   const scheduledToday = new Set(trip.blocks.filter((b) => b.day === day).map((b) => b.itemId))
 
-  const ranked = trip.items
+  const ranked = ideas(trip)
     .filter((i) => (i.type !== 'transport' || i.location) && i.duration.typical > 0)
     // Items with set times only belong on their own day.
     .filter((i) => !i.anchors.length || anchoredSlot(i, trip.timezone)?.day === day)

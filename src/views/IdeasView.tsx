@@ -1,11 +1,12 @@
-import { CalendarPlus, Heart, Plus, Search } from 'lucide-react'
+import { CalendarPlus, ClipboardList, Heart, Plus, Search } from 'lucide-react'
+import { InboxBanner, InboxReview, PasteSheet } from '../components/inbox'
 import { useState } from 'react'
 import { clock, ObjectCard } from '../components/objects'
 import { INTEREST_META, INTERESTS, Sheet } from '../components/ui'
 import { hoursSummary } from '../lib/hours'
 import { anchoredSlot, findSlot, interestScore } from '../lib/schedule'
 import { dayLabel, dayRange, fmtDuration } from '../lib/time'
-import { useStore } from '../store'
+import { ideas, useStore } from '../store'
 import type { Interest, Item, Trip } from '../types'
 
 type Filter = 'all' | 'unscheduled' | 'must' | 'everyone' | 'needsVote' | 'tbd'
@@ -26,6 +27,8 @@ export default function IdeasView() {
   const [filter, setFilter] = useState<Filter>('all')
   const [q, setQ] = useState('')
   const [scheduling, setScheduling] = useState<Item | null>(null)
+  const [pasting, setPasting] = useState(false)
+  const [reviewing, setReviewing] = useState(false)
 
   const scheduledIds = new Set(trip.blocks.map((b) => b.itemId))
   const keep = (i: Item) => {
@@ -40,7 +43,7 @@ export default function IdeasView() {
     }
   }
   const ql = q.toLowerCase()
-  const items = trip.items
+  const items = ideas(trip)
     .filter(keep)
     .filter((i) => !ql || i.title.toLowerCase().includes(ql) || i.tags.some((t) => t.includes(ql)) || i.notes?.toLowerCase().includes(ql))
     .sort((a, b) => interestScore(b) - interestScore(a) || a.createdAt - b.createdAt)
@@ -49,15 +52,17 @@ export default function IdeasView() {
     <div className="flex flex-col gap-3 px-3 pb-8 pt-3">
       <div className="flex items-end justify-between px-1">
         <div className="text-[28px] font-bold leading-tight tracking-tight">Ideas</div>
-        <span className="mb-1 font-mono text-xs t-sub">{trip.items.length} ideas</span>
+        <span className="mb-1 font-mono text-xs t-sub">{ideas(trip).length} ideas</span>
       </div>
       <div className="flex gap-2">
         <label className="relative flex-1">
           <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 t-sub" />
           <input className="input pl-9" placeholder="Search ideas, tags, notes" value={q} onChange={(e) => setQ(e.target.value)} />
         </label>
-        <button className="btn shrink-0" onClick={() => edit(addItem({}))}><Plus size={16} /> Idea</button>
+        <button className="btn-soft shrink-0 px-3" onClick={() => setPasting(true)} aria-label="Paste a list" title="Paste a list"><ClipboardList size={16} /> List</button>
+        <button className="btn shrink-0 px-3" onClick={() => edit(addItem({}))}><Plus size={16} /> Idea</button>
       </div>
+      <InboxBanner onReview={() => setReviewing(true)} />
       <div className="-mx-3 flex gap-1.5 overflow-x-auto px-3">
         {FILTERS.map((f) => (
           <button
@@ -78,6 +83,16 @@ export default function IdeasView() {
       </div>
       {!items.length && <p className="py-8 text-center text-sm t-sub">Nothing here.</p>}
       {scheduling && <ScheduleSheet trip={trip} item={scheduling} onClose={() => setScheduling(null)} />}
+      {pasting && <PasteSheet onClose={() => setPasting(false)} onAdded={() => setReviewing(true)} />}
+      {reviewing && (
+        <InboxReview
+          onClose={() => setReviewing(false)}
+          onEdit={(id) => {
+            setReviewing(false)
+            edit(id)
+          }}
+        />
+      )}
     </div>
   )
 }

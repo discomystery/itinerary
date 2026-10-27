@@ -60,6 +60,28 @@ export interface Item {
   /** Shown as "needs details" until someone fills in what's missing. */
   tbd?: string
   createdAt: number
+  /** Added in bulk and waiting for someone to review it in the Inbox. */
+  inbox?: InboxInfo
+}
+
+export interface PlaceMatch {
+  name: string
+  address: string
+  lat: number
+  lng: number
+  hours?: string
+  website?: string
+}
+
+export interface InboxInfo {
+  /** The line as it was pasted. */
+  raw: string
+  lookup: 'pending' | 'found' | 'none' | 'error' | 'skip'
+  /** Other places the lookup found, best first. */
+  matches?: PlaceMatch[]
+  /** Weekday the paste mentioned (0 = Sunday). */
+  weekday?: number
+  addedBy?: Id
 }
 
 export type TransitMode = 'walk' | 'transit' | 'drive'

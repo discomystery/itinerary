@@ -4,6 +4,7 @@ import { Avatar, cx } from './components/ui'
 import ItemEditor from './components/ItemEditor'
 import { type Tab, useStore } from './store'
 import { importFromHash } from './lib/share'
+import { useInboxLookups } from './lib/useInboxLookups'
 import IdeasView from './views/IdeasView'
 import MapView from './views/MapView'
 import NowView from './views/NowView'
@@ -21,6 +22,7 @@ const TABS: { id: Tab; Icon: LucideIcon; label: string }[] = [
 export default function App() {
   const { tab, setTab, trip, viewer, setViewer, history: past, undo, editing, edit } = useStore()
   const [shareMsg, setShareMsg] = useState<string | null>(null)
+  useInboxLookups()
 
   useEffect(() => {
     importFromHash().then((t) => {

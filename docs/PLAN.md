@@ -71,6 +71,23 @@ the schedule zero, one, or many times.
 - **Plan** has a List view (default) and a calendar-style Day view where travel
   time is a striped lead-in above each plan.
 
+## Adding lots of ideas (v1.2)
+
+- **Paste a list** (Ideas → List): one idea per line from a text, notes, a blog
+  list or Google Maps links. Bullets, `#tags`, "Title – note", "Title (note)",
+  a leading day ("Sat: …") and section headers ("Food:") are understood. Kind
+  hints come from words like dinner, sauna, museum, bar, neighborhood, tickets.
+  Google Maps place links give the name and pin directly.
+- Everything lands in an **Inbox**. Each idea is looked up on OpenStreetMap in
+  the background (one per second, Nominatim's limit) to fill in the pin,
+  address, hours and website.
+- **Review one card at a time**: check or change the map match, vote, then Keep,
+  Skip (or swipe), Later, or "Keep and place it" on a suggested day. Day
+  suggestions respect opening hours and prefer the day the list mentioned, then
+  days with plans nearby.
+- Next options: Google Takeout saved lists, browse nearby by category, and
+  AI extraction from any text once there's a backend.
+
 ## Next (v2 candidates)
 
 1. **Real-time sync + accounts** (Supabase): each person votes as themselves; activity feed.
