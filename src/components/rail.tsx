@@ -1,6 +1,7 @@
 import { CarTaxiFront, ChevronRight, Footprints, type LucideIcon, Navigation, Sunrise, Sunset, TramFront, TriangleAlert } from 'lucide-react'
 import type { CSSProperties } from 'react'
 import { daylight } from '../lib/hours'
+import { useFetchRoutes, useRoutes } from '../lib/routeCache'
 import { type Leg, makeCtx } from '../lib/schedule'
 import { fmtDistance, directionsUrl, MODES } from '../lib/transit'
 import { fmtDuration } from '../lib/time'
@@ -22,20 +23,23 @@ export const MODE_STYLE: Record<TransitMode, { Icon: LucideIcon; name: string; c
 export const railVars = (mode?: TransitMode) =>
   (mode ? { '--c': MODE_STYLE[mode].c, '--t': MODE_STYLE[mode].t, '--dk': MODE_STYLE[mode].dk } : {}) as CSSProperties
 
-/** When you need to leave for a leg: the destination's start minus travel. */
+/** When you need to leave for a leg: the timetabled departure, else the destination's start minus travel. */
 export function leaveAt(trip: Trip, leg: Leg): number {
+  if (leg.leave != null) return leg.leave
   const to = trip.blocks.find((b) => b.id === leg.toId)!
   return to.start - leg.minutes
 }
 
-export function LegPill({ trip, leg, onOpen }: { trip: Trip; leg: Leg; onOpen: () => void }) {
+/** `late`: minutes past the leave-by time already (the Now view). */
+export function LegPill({ trip, leg, late, onOpen }: { trip: Trip; leg: Leg; late?: number; onOpen: () => void }) {
   const m = MODE_STYLE[leg.mode]
-  const short = leg.tight ? leg.minutes - Math.max(0, leg.gap) : 0
+  const from = trip.blocks.find((b) => b.id === leg.fromId)
+  const short = late ?? (!leg.tight ? 0 : leg.leave != null && from ? from.end - leg.leave : leg.minutes - Math.max(0, leg.gap))
   return (
     <div className={cx('rail', leg.mode === 'walk' && 'walk')} style={railVars(leg.mode)}>
-      <button className={cx('pill', leg.tight && 'tight')} onClick={onOpen} aria-label={`${m.name} ${leg.minutes} minutes, leave at ${clock(leaveAt(trip, leg))}. Change how you get there`}>
+      <button className={cx('pill', leg.tight && 'tight')} onClick={onOpen} aria-label={`${leg.line ?? m.name} ${leg.minutes} minutes, leave at ${clock(leaveAt(trip, leg))}. Change how you get there`}>
         <span className="mi">{leg.tight ? <TriangleAlert /> : <m.Icon />}</span>
-        {leg.minutes} min
+        {leg.line && `${leg.line} · `}{leg.minutes} min
         <small>· {leg.tight ? `${short} min short` : `leave ${clock(leaveAt(trip, leg))}`}</small>
         <ChevronRight />
       </button>
@@ -91,23 +95,28 @@ export function Horizon({ trip, day, now }: { trip: Trip; day: string; now?: num
 export function LegSheet({ leg, onClose }: { leg: Leg; onClose: () => void }) {
   const trip = useStore((s) => s.trip)
   const updateBlock = useStore((s) => s.updateBlock)
-  const ctx = makeCtx(trip)
+  const routes = useRoutes((s) => s.routes)
+  const ctx = makeCtx(trip, routes)
   const from = trip.blocks.find((b) => b.id === leg.fromId) as Block
   const to = trip.blocks.find((b) => b.id === leg.toId) as Block
   const fromItem = itemById(trip, from.itemId)!
   const toItem = itemById(trip, to.itemId)!
   const current = trip.blocks.find((b) => b.id === leg.toId)?.modeIn ?? leg.mode
+  const options = MODES.map((mode) => {
+    const r = ctx.route(from, to, mode)
+    const mins = ctx.travel(from, to, mode)
+    const leave = r?.leave ?? to.start - mins
+    return { mode, r, mins, leave, short: from.end - leave }
+  })
+  useFetchRoutes([...ctx.missing.values()])
   return (
     <Sheet open onClose={onClose} title={`${fromItem.title} → ${toItem.title}`}>
       <p className="mb-3 text-sm t-sub">
         Arrive by {clock(to.start)} · {fmtDistance(leg.meters)} · you're free from {clock(from.end)}
       </p>
       <div className="flex flex-col gap-2">
-        {MODES.map((mode) => {
+        {options.map(({ mode, r, mins, leave, short }) => {
           const m = MODE_STYLE[mode]
-          const mins = ctx.travel(from, to, mode)
-          const leave = to.start - mins
-          const short = from.end - leave
           const on = current === mode
           return (
             <button
@@ -121,7 +130,7 @@ export function LegSheet({ leg, onClose }: { leg: Leg; onClose: () => void }) {
               <span>
                 <span className="block text-sm font-semibold">{m.name}</span>
                 <span className="block font-mono text-xs t-sub">
-                  ~{mins} min{short > 0 ? ` · ${short} min short` : ''}
+                  {r ? '' : '~'}{mins} min{r?.line ? ` · ${r.line}` : ''}{short > 0 ? ` · ${short} min short` : ''}
                 </span>
               </span>
               <span className="text-right font-mono text-sm font-semibold" style={{ color: short > 0 ? '#b45309' : undefined }}>
@@ -137,7 +146,11 @@ export function LegSheet({ leg, onClose }: { leg: Leg; onClose: () => void }) {
           <Navigation size={16} /> Directions in Google Maps
         </a>
       )}
-      <p className="mt-3 text-xs t-sub">Times are estimates from distance. Google Maps has the exact route and live departures.</p>
+      <p className="mt-3 text-xs t-sub">
+        Routes and timetables from {SOURCE_NAMES}. Times marked ~ are estimates from distance until a route loads.
+      </p>
     </Sheet>
   )
 }
+
+const SOURCE_NAMES = 'OpenStreetMap, HSL and Transitous'

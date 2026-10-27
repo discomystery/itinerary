@@ -1,7 +1,9 @@
 import type { Anchor, Block, Interest, Item, LatLng, TransitMode, Trip } from '../types'
 import { daylight, openStatus } from './hours'
+import { cachedRoutes } from './routeCache'
+import { isStale, type Route, type RouteRequest, routable, routeKey } from './routing'
 import { distanceMeters, suggestMode, travelMinutes } from './transit'
-import { utcToWall, wallToUtc } from './time'
+import { fmtTime, utcToWall, wallToUtc } from './time'
 
 export const INTEREST_SCORE: Record<Interest, number> = { must: 3, yes: 1, meh: 0, no: -2 }
 
@@ -53,9 +55,12 @@ export interface Ctx {
   loc: (b: Block) => LatLng | undefined
   mode: (prev: Block, b: Block) => TransitMode
   travel: (prev: Block, b: Block, modeOverride?: TransitMode) => number
+  /** The fetched route for this leg, if we have one. Misses land in `missing`. */
+  route: (prev: Block, b: Block, modeOverride?: TransitMode) => Route | undefined
+  missing: Map<string, RouteRequest>
 }
 
-export function makeCtx(trip: Trip): Ctx {
+export function makeCtx(trip: Trip, routes: Record<string, Route> = cachedRoutes()): Ctx {
   const byId = new Map(trip.items.map((i) => [i.id, i]))
   const item = (id: string) => byId.get(id)
   const loc = (b: Block) => item(b.itemId)?.location
@@ -65,13 +70,24 @@ export function makeCtx(trip: Trip): Ctx {
     const z = loc(b)
     return a && z ? suggestMode(a, z, trip.defaultMode) : trip.defaultMode
   }
+  const missing = new Map<string, RouteRequest>()
+  const route = (prev: Block, b: Block, modeOverride?: TransitMode) => {
+    const from = loc(prev)
+    const to = loc(b)
+    if (!from || !to || !routable(from, to)) return undefined
+    const m = modeOverride ?? mode(prev, b)
+    const key = routeKey(from, to, m, b.day, b.start)
+    const hit = routes[key]
+    if (!hit || isStale(hit)) missing.set(key, { key, from, to, mode: m, day: b.day, arriveBy: b.start, timezone: trip.timezone })
+    return hit
+  }
   const travel = (prev: Block, b: Block, modeOverride?: TransitMode) => {
     const a = loc(prev)
     const z = loc(b)
     if (!a || !z) return 0
-    return travelMinutes(a, z, modeOverride ?? mode(prev, b))
+    return route(prev, b, modeOverride)?.minutes ?? travelMinutes(a, z, modeOverride ?? mode(prev, b))
   }
-  return { trip, item, loc, mode, travel }
+  return { trip, item, loc, mode, travel, route, missing }
 }
 
 /** Latest acceptable arrival for a locked block: its first hard anchor inside it, else its start. */
@@ -104,12 +120,20 @@ export interface Leg {
   meters: number
   gap: number
   tight: boolean
+  /** From a fetched route rather than the distance estimate. */
+  live?: boolean
+  /** Transit lines, e.g. "Tram 4". */
+  line?: string
+  /** Timetabled departure, when it isn't simply arrival minus travel. */
+  leave?: number
 }
 
 export interface DayAnalysis {
   blocks: Block[]
   legs: Leg[]
   issues: Map<string, Issue[]>
+  /** Routes these legs would use that haven't been fetched yet. */
+  missing: RouteRequest[]
 }
 
 function sharesPeople(a: Block, b: Block): boolean {
@@ -166,29 +190,38 @@ export function analyzeDay(trip: Trip, day: string, ctx: Ctx = makeCtx(trip)): D
     const here = ctx.loc(b)
     if (prev && here) {
       const mode = ctx.mode(prev, b)
+      const r = ctx.route(prev, b)
       const minutes = ctx.travel(prev, b)
       const gap = b.start - prev.end
-      const tight = minutes > 0 && gap < minutes && gap >= 0
+      // A timetable can make you wait: then it's tight if the last departure
+      // that still gets you there leaves before you're free.
+      const tight = r?.leave != null ? gap >= 0 && r.leave < prev.end : minutes > 0 && gap < minutes && gap >= 0
       legs.push({
         fromId: prev.id,
         toId: b.id,
         mode,
         minutes,
-        meters: distanceMeters(ctx.loc(prev)!, here),
+        meters: r?.meters ?? distanceMeters(ctx.loc(prev)!, here),
         gap,
         tight,
+        live: !!r,
+        line: r?.line,
+        leave: r?.leave,
       })
       if (tight) {
         add(b.id, {
           kind: 'tight',
           severity: b.locked && prev.end + minutes > hardBy(ctx, b) ? 'error' : 'warn',
-          message: `~${minutes}m to get here but only ${gap}m gap`,
+          message:
+            r?.leave != null
+              ? `Last ${r.line ?? 'connection'} that makes it leaves ${fmtTime(r.leave)}, before you're free`
+              : `~${minutes}m to get here but only ${gap}m gap`,
         })
       }
     }
   })
 
-  return { blocks, legs, issues }
+  return { blocks, legs, issues, missing: [...ctx.missing.values()] }
 }
 
 export function worstSeverity(list: Issue[] | undefined): Severity | null {

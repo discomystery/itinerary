@@ -27,8 +27,8 @@ the schedule zero, one, or many times.
 - **Free/open map data**: Leaflet + OpenStreetMap tiles, Nominatim search (pulls
   `opening_hours` when OSM has it), the `opening_hours` library to evaluate hours,
   and `suncalc` for daylight.
-- **Transit** is estimated (straight-line × detour ÷ mode speed + overhead) with a
-  Google Maps directions link for the real route.
+- **Transit** uses real routes where it can (see *Real routing* below) and falls
+  back to an estimate (straight-line × detour ÷ mode speed + overhead).
 - **Running late suggests fixes** (shorten / move / skip / taxi) rather than just warning.
 
 ## v1 features (built)
@@ -88,15 +88,29 @@ the schedule zero, one, or many times.
 - Next options: Google Takeout saved lists, browse nearby by category, and
   AI extraction from any text once there's a backend.
 
+## Real routing (v1.3)
+
+- Each leg between plans is routed for real, in the background, two requests
+  at a time: **walk and taxi** with OSRM on routing.openstreetmap.de, **transit**
+  with Transitous (free, worldwide, no key) or, inside the HSL area when
+  `VITE_DIGITRANSIT_KEY` is set at build time, HSL's Digitransit API.
+- Transit is searched as "arrive by the plan's start", so the leg gets the
+  actual line ("Tram 4") and the **latest departure that still makes it**.
+  A connection is tight when that departure is before you're free.
+- Routes are cached per device (`itinerary-routes-v1` in localStorage), not in
+  the trip, so share links stay small. Transit refreshes after 3 days,
+  walk/taxi after 30. Legs under 50 m or over 100 km aren't routed.
+- Until a route loads (or if it fails, or you're offline) the estimate is used
+  and the sheet marks it with ~.
+
 ## Next (v2 candidates)
 
 1. **Real-time sync + accounts** (Supabase): each person votes as themselves; activity feed.
 2. **Group splits**: blocks already have `who?: Id[]`; add per-person lanes and meet-up points.
 3. **Smart fill**: "we have 3 free hours, suggest a cluster of nearby must-dos."
-4. **Real routing** (OSRM / HSL Digitransit API for Helsinki public transit times).
-5. **Offline** service worker (tiles + data) for spotty roaming.
-6. Attachments for tickets/confirmations; expense split; import Google Maps lists.
-7. Code-split the map and hours libraries (bundle is ~250 KB gzipped).
+4. **Offline** service worker (tiles + data) for spotty roaming.
+5. Attachments for tickets/confirmations; expense split; import Google Maps lists.
+6. Code-split the map and hours libraries (bundle is ~250 KB gzipped).
 
 ## Helsinki trip seed (Nov 10–16, 2026)
 

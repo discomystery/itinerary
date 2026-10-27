@@ -1,10 +1,11 @@
 import { ChevronRight, CircleAlert, Lock, Plus } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { clock, glyphFor, ObjectCard } from '../components/objects'
-import { Horizon, LegPill, LegSheet } from '../components/rail'
+import { Horizon, leaveAt, LegPill, LegSheet } from '../components/rail'
 import { cx, Votes } from '../components/ui'
 import { hoursSummary, openStatus } from '../lib/hours'
 import { applyDay, runningLate, type LateResult } from '../lib/reflow'
+import { useFetchRoutes, useRoutes } from '../lib/routeCache'
 import { analyzeDay, anchorOnDay, dayBlocks, interestScore, type Leg, makeCtx } from '../lib/schedule'
 import { dayLabel, fmtDuration, toHHMM, wallToUtc } from '../lib/time'
 import { distanceMeters, fmtDistance, suggestMode, travelMinutes } from '../lib/transit'
@@ -20,8 +21,10 @@ export default function NowView() {
   const now = useNow()
   const [openLeg, setOpenLeg] = useState<Leg | null>(null)
   const inTrip = now.day >= trip.startDay && now.day <= trip.endDay
-  const ctx = useMemo(() => makeCtx(trip), [trip])
-  const analysis = useMemo(() => analyzeDay(trip, now.day), [trip, now.day])
+  const routes = useRoutes((s) => s.routes)
+  const ctx = useMemo(() => makeCtx(trip, routes), [trip, routes])
+  const analysis = useMemo(() => analyzeDay(trip, now.day, makeCtx(trip, routes)), [trip, routes, now.day])
+  useFetchRoutes(analysis.missing)
   const today = dayBlocks(trip, now.day)
   const current = today.find((b) => b.start <= now.min && b.end > now.min)
   const upcoming = today.filter((b) => b.start > now.min)
@@ -106,10 +109,9 @@ export default function NowView() {
 /** The leg to the next plan, flagged if it's already time to go. */
 function LateAwareLeg({ leg, now, onOpen }: { leg: Leg; now: number; onOpen: () => void }) {
   const trip = useStore((s) => s.trip)
-  const to = trip.blocks.find((b) => b.id === leg.toId)!
-  const leave = to.start - leg.minutes
+  const leave = leaveAt(trip, leg)
   if (leave > now) return <LegPill trip={trip} leg={leg} onOpen={onOpen} />
-  return <LegPill trip={trip} leg={{ ...leg, tight: true, gap: leg.minutes - (now - leave) }} onOpen={onOpen} />
+  return <LegPill trip={trip} leg={{ ...leg, tight: true }} late={now - leave} onOpen={onOpen} />
 }
 
 function SimControl({ inTrip }: { inTrip: boolean }) {

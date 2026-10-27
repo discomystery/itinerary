@@ -4,7 +4,8 @@ import { clock, glyphFor, objectKind, ObjectCard } from '../components/objects'
 import { Horizon, LegPill, LegSheet, leaveAt, MODE_STYLE, RailGap, RailMark, railVars } from '../components/rail'
 import { cx, IssueList, Segmented, Sheet, Votes } from '../components/ui'
 import { daylight, hoursSummary, openSpans, openStatus } from '../lib/hours'
-import { type DayAnalysis, type Leg, analyzeDay, anchorOnDay, anchoredSlot, findSlot, interestScore, worstSeverity } from '../lib/schedule'
+import { useFetchRoutes, useRoutes } from '../lib/routeCache'
+import { type DayAnalysis, type Leg, analyzeDay, anchorOnDay, anchoredSlot, findSlot, interestScore, makeCtx, worstSeverity } from '../lib/schedule'
 import { dayLabel, dayRange, fmtDuration, parseHHMM, snap, toHHMM } from '../lib/time'
 import { useNow } from '../lib/useNow'
 import { ideas, itemById, useStore } from '../store'
@@ -20,8 +21,14 @@ export default function PlanView() {
   const day = useStore((s) => s.day)
   const setDay = useStore((s) => s.setDay)
   const days = dayRange(trip.startDay, trip.endDay)
-  const analyses = useMemo(() => Object.fromEntries(days.map((d) => [d, analyzeDay(trip, d)])), [trip, days.join()])
-  const analysis = analyses[day] ?? analyzeDay(trip, day)
+  const routes = useRoutes((s) => s.routes)
+  const analyses = useMemo(
+    () => Object.fromEntries(days.map((d) => [d, analyzeDay(trip, d, makeCtx(trip, routes))])),
+    [trip, routes, days.join()],
+  )
+  const analysis = analyses[day] ?? analyzeDay(trip, day, makeCtx(trip, routes))
+  // Fetch the whole trip's legs, so issue dots on other days are real too.
+  useFetchRoutes(Object.values(analyses).flatMap((a) => a.missing))
   const now = useNow()
   const [mode, setMode] = useState<Mode>(() => {
     try {
@@ -324,7 +331,7 @@ function DayView({ trip, day, analysis, onEmpty, onOpen, onLeg }: {
                     const M = MODE_STYLE[leg.mode].Icon
                     return <M />
                   })()}
-                  {leg.minutes} min{leg.minutes * PX > 20 && ` · leave ${clock(b.start - leg.minutes)}`}
+                  {leg.minutes} min{leg.minutes * PX > 20 && ` · leave ${clock(leaveAt(trip, leg))}`}
                 </div>
               )}
               <div
@@ -517,7 +524,7 @@ function BlockSheet({ id, analysis, onClose, onLeg }: { id: string; analysis: Da
             <div className="label mb-1.5">Getting here</div>
             <button className={cx('pill', leg.tight && 'tight')} style={railVars(leg.mode)} onClick={() => onLeg(leg)}>
               {(() => { const M = MODE_STYLE[leg.mode].Icon; return <span className="mi"><M /></span> })()}
-              {MODE_STYLE[leg.mode].name} · {leg.minutes} min <small>· leave {clock(b.start - leg.minutes)}</small>
+              {leg.line ?? MODE_STYLE[leg.mode].name} · {leg.minutes} min <small>· leave {clock(leaveAt(trip, leg))}</small>
               <ChevronRight />
             </button>
           </div>
