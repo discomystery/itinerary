@@ -309,6 +309,14 @@ button.o:active { transform: scale(0.99); }
 .o.pass .iata.sm { font-size: 24px; line-height: 1; text-transform: uppercase; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .o.pass .city { font: 500 10.5px/1.25 var(--mono); color: var(--p-sub); }
 .o.pass .pl { color: var(--p-sub); padding-bottom: 14px; } .o.pass .pl svg { width: 18px; height: 18px; }
+.o.pass .pl { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.o.pass .via { font: 600 9px/1 var(--mono); letter-spacing: 0.07em; text-transform: uppercase; white-space: nowrap; }
+.o.pass .legs { display: flex; flex-direction: column; gap: 4px; border-top: 1.5px dashed var(--p-seam); border-bottom: 1.5px dashed var(--p-seam); padding: 6px 0; }
+.o.pass .leg { display: grid; grid-template-columns: 4.5em 5.5em 1fr auto; gap: 6px; font: 600 11.5px/1.3 var(--mono); white-space: nowrap; }
+.o.pass .leg .fn { overflow: hidden; text-overflow: ellipsis; }
+.o.pass .leg .st { color: var(--p-sub); }
+.o.pass .lay { font: 500 10.5px/1.3 var(--mono); color: var(--p-sub); padding-left: 4.5em; }
+.o.pass .lay.warnline { color: #b45309; }
 .o.pass.v-train { --glyph: #0a7d3c; } .o.pass.v-ferry { --glyph: #0b5c8a; } .o.pass.v-coach { --glyph: #7a3e9d; }
 /* fare */
 .o .zones { display: flex; gap: 3px; }

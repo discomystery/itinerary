@@ -80,6 +80,29 @@ export interface Item {
   checklist?: CheckItem[]
   /** Day a postcard was stamped visited. */
   visited?: string
+  /** Flights: one entry per leg, in order. Connections are worked out from these. */
+  legs?: FlightLeg[]
+}
+
+/** A wall time in a specific place, e.g. 7:05a on Nov 10 in Raleigh. */
+export interface LocalTime {
+  day: string
+  time: number
+  /** Defaults to the airport's timezone, then the trip's. */
+  tz?: string
+}
+
+export interface FlightLeg {
+  id: Id
+  /** IATA airport codes, e.g. "RDU" → "JFK". */
+  from: string
+  to: string
+  /** e.g. "AA 4421" */
+  flightNo?: string
+  depart: LocalTime
+  arrive: LocalTime
+  seat?: string
+  confirmation?: string
 }
 
 export type DocKind = 'passport' | 'entry' | 'insurance' | 'loyalty' | 'other'

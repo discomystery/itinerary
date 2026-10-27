@@ -33,14 +33,15 @@ import {
   UtensilsCrossed,
   Wine,
 } from 'lucide-react'
-import type { CSSProperties, ReactNode } from 'react'
+import { Fragment, type CSSProperties, type ReactNode } from 'react'
 import { cardKind, coveredByPass, det, spanOf, variantOf } from '../lib/cards'
+import { isFlight, layovers, via } from '../lib/flights'
 import { hoursSummary, openSpans } from '../lib/hours'
 import { anchorInTrip, anchorOnDay, type Issue, worstSeverity } from '../lib/schedule'
 import { dayLabel, dayRange, fmtDuration } from '../lib/time'
 import { distanceMeters } from '../lib/transit'
 import { uid, useStore } from '../store'
-import type { Block, CardKind, Item, Person, Trip } from '../types'
+import type { Block, CardKind, FlightLeg, Item, Person, Trip } from '../types'
 import { cx, Votes } from './ui'
 
 // Every plan is drawn as the real-world object it stands for. Folded, they all
@@ -172,6 +173,10 @@ export function defaultEyebrow(i: Item, day?: string, block?: Block, tz?: string
     case 'fare':
       return v === 'day' ? `Day pass${det(i, 'zones') ? ` · zones ${det(i, 'zones')}` : ''}` : `Transit · ~${fmtDuration(i.duration.typical)}`
     case 'pass':
+      if (isFlight(i)) {
+        const stops = via(i.legs)
+        return `${stops.length ? `Flight · via ${stops.join(', ')}` : 'Flight · nonstop'}${on(day ?? firstDay)}${block && block.end >= 1440 ? ' · lands +1' : ''}`
+      }
       return `${PASS_WORD[v ?? 'flight']}${on(day ?? firstDay)}`
     case 'xfer':
       return `Transfer${on(day ?? firstDay)}`
@@ -370,6 +375,7 @@ function metaLine(i: Item, k: CardKind, v?: string): string | null {
     const bits = v === 'train' ? [det(i, 'train'), det(i, 'coach') && `coach ${det(i, 'coach')}`, det(i, 'seat') && `seat ${det(i, 'seat')}`]
       : v === 'ferry' ? [det(i, 'terminal'), i.address]
       : v === 'coach' ? [det(i, 'bay') && `bay ${det(i, 'bay')}`, det(i, 'seat') && `seat ${det(i, 'seat')}`]
+      : isFlight(i) ? i.legs.map((l) => l.flightNo)
       : [det(i, 'airline'), det(i, 'flight'), det(i, 'seat') && `seat ${det(i, 'seat')}`]
     const s = bits.filter(Boolean).join(' · ')
     return s || null
@@ -389,6 +395,30 @@ const KV = ({ k, v, wide }: { k: string; v?: ReactNode; wide?: boolean }) => (
     <div className="v">{v ?? '—'}</div>
   </div>
 )
+
+/** Each flight of a connection, with the layover printed between them. */
+function LegList({ legs, tz }: { legs: FlightLeg[]; tz: string }) {
+  const lays = layovers(legs, tz)
+  return (
+    <div className="legs">
+      {legs.map((l, n) => (
+        <Fragment key={l.id}>
+          <div className="leg">
+            <span className="fn">{l.flightNo ?? '—'}</span>
+            <span>{l.from.toUpperCase()}–{l.to.toUpperCase()}</span>
+            <span><Clock m={l.depart.time} />–<Clock m={l.arrive.time} />{l.arrive.day > l.depart.day && <sup>+1</sup>}</span>
+            <span className="st">{l.seat ? `Seat ${l.seat}` : ''}</span>
+          </div>
+          {lays[n] && (
+            <div className={cx('lay', (lays[n].tight || lays[n].leaveFrom) && 'warnline')}>
+              {lays[n].minutes < 0 ? `Leaves ${lays[n].leaveFrom ?? lays[n].at} before you land` : `${fmtDuration(lays[n].minutes)} in ${lays[n].at}${lays[n].leaveFrom ? `, leave from ${lays[n].leaveFrom}` : ''}${lays[n].overnight ? ' · overnight' : ''}`}
+            </div>
+          )}
+        </Fragment>
+      ))}
+    </div>
+  )
+}
 
 function Add({ label, onEdit }: { label: string; onEdit?: () => void }) {
   if (!onEdit) return null
@@ -505,14 +535,16 @@ function panels(item: Item, trip: Trip, block: Block | undefined, day: string | 
         v === 'train' ? [['Platform', d('platform')], ['Coach', d('coach')], ['Seat', d('seat')], ['Train', d('train')], ['Class', d('class')], ['Ticket', d('ticket')]]
         : v === 'ferry' ? [['Check-in closes', item.anchors.find((a) => /check/i.test(a.label)) && clock(item.anchors.find((a) => /check/i.test(a.label))!.time)], ['Deck', d('deck')], ['Cabin', d('cabin')], ['Vehicle', d('vehicle')], ['Terminal', d('terminal')], ['Booking', d('booking')]]
         : v === 'coach' ? [['Bay', d('bay')], ['Seat', d('seat')], ['Operator', d('operator')], ['Booking', d('booking')]]
+        : isFlight(item) ? [['Boarding', item.anchors.find((a) => /board/i.test(a.label)) && clock(item.anchors.find((a) => /board/i.test(a.label))!.time)], ['Gate', d('gate')], ['Terminal', d('terminal')]]
         : [['Flight', [d('airline'), d('flight')].filter(Boolean).join(' ') || undefined], ['Boarding', item.anchors.find((a) => /board/i.test(a.label)) && clock(item.anchors.find((a) => /board/i.test(a.label))!.time)], ['Gate', d('gate')], ['Seat', d('seat')], ['Conf.', d('conf')], ['Terminal', d('terminal')]]
       return {
         pb: (<>
           <div className="route">
             <div><div className={cx('iata', big && 'sm', !d('from') && 'dash')}>{d('from') ?? '---'}</div><div className="city">{dep ? dayShort(dep.day) : ''}<br />{at(dep)}</div></div>
-            <div className="pl"><ArrowRight /></div>
+            <div className="pl">{isFlight(item) && item.legs.length > 1 && <span className="via">via {via(item.legs).join(' · ')}</span>}<ArrowRight /></div>
             <div className="text-right"><div className={cx('iata', big && 'sm', !d('to') && 'dash')}>{d('to') ?? '---'}</div><div className="city">{arr ? dayShort(arr.day) : ''}<br />{at(arr)}</div></div>
           </div>
+          {isFlight(item) && item.legs.length > 1 && <LegList legs={item.legs} tz={tz} />}
           <div className="grid3">{rows.map(([kk, vv]) => <KV key={kk} k={kk} v={vv} />)}</div>
           <Add label={`Add ${PASS_WORD[v ?? 'flight'].toLowerCase()} details`} onEdit={onEdit} />
         </>),

@@ -161,7 +161,7 @@ function ListView({ trip, day, analysis, unfolded, onToggle, onEdit, onMore, onL
     const leg = legByTo.get(b.id)
     const from = leg && trip.blocks.find((x) => x.id === leg.fromId)
     const to = ctx.loc(b)
-    const dir = to ? directionsUrl(from ? ctx.loc(from) : undefined, to, leg?.mode ?? trip.defaultMode, mapsApp) : undefined
+    const dir = to ? directionsUrl(from ? ctx.locEnd(from) : undefined, to, leg?.mode ?? trip.defaultMode, mapsApp) : undefined
     const open = unfolded === b.id
     rows.push({
       key: b.id,
