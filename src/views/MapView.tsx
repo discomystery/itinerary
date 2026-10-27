@@ -7,6 +7,7 @@ import { InterestPicker, Segmented, TYPE_META, VoteList } from '../components/ui
 import { hoursSummary } from '../lib/hours'
 import { dayBlocks, interestScore } from '../lib/schedule'
 import { dayLabel, dayRange } from '../lib/time'
+import { MAPS_APP_NAME, placeUrl } from '../lib/transit'
 import { ideas, useStore } from '../store'
 import type { Item, LatLng } from '../types'
 
@@ -39,6 +40,7 @@ export default function MapView() {
   const trip = useStore((s) => s.trip)
   const day = useStore((s) => s.day)
   const viewer = useStore((s) => s.viewer)
+  const mapsApp = useStore((s) => s.mapsApp)
   const { setDay, setInterest, edit } = useStore()
   const [show, setShow] = useState<Show>('day')
   const [colorBy, setColorBy] = useState<ColorBy>('type')
@@ -60,6 +62,7 @@ export default function MapView() {
         <VoteList item={i} people={trip.people} />
         <InterestPicker size="sm" value={i.interest[viewer]} onChange={(v) => setInterest(i.id, viewer, v)} />
         <button className="btn-soft w-full py-1" onClick={() => edit(i.id)}>Open</button>
+        {i.location && <a className="block text-center text-xs font-medium" style={{ color: 'var(--act)' }} href={placeUrl(i.title, i.location, mapsApp)} target="_blank" rel="noreferrer">Open in {MAPS_APP_NAME[mapsApp]}</a>}
       </div>
     </Popup>
   )

@@ -3,7 +3,7 @@ import type { CSSProperties } from 'react'
 import { daylight } from '../lib/hours'
 import { useFetchRoutes, useRoutes } from '../lib/routeCache'
 import { type Leg, makeCtx } from '../lib/schedule'
-import { fmtDistance, directionsUrl, MODES } from '../lib/transit'
+import { fmtDistance, directionsUrl, MAPS_APP_NAME, MODES } from '../lib/transit'
 import { fmtDuration } from '../lib/time'
 import { itemById, useStore } from '../store'
 import type { Block, TransitMode, Trip } from '../types'
@@ -95,6 +95,7 @@ export function Horizon({ trip, day, now }: { trip: Trip; day: string; now?: num
 export function LegSheet({ leg, onClose }: { leg: Leg; onClose: () => void }) {
   const trip = useStore((s) => s.trip)
   const updateBlock = useStore((s) => s.updateBlock)
+  const mapsApp = useStore((s) => s.mapsApp)
   const routes = useRoutes((s) => s.routes)
   const ctx = makeCtx(trip, routes)
   const from = trip.blocks.find((b) => b.id === leg.fromId) as Block
@@ -142,12 +143,12 @@ export function LegSheet({ leg, onClose }: { leg: Leg; onClose: () => void }) {
         })}
       </div>
       {toItem.location && (
-        <a className="btn mt-4 w-full py-3" href={directionsUrl(fromItem.location, toItem.location, current)} target="_blank" rel="noreferrer">
-          <Navigation size={16} /> Directions in Google Maps
+        <a className="btn mt-4 w-full py-3" href={directionsUrl(fromItem.location, toItem.location, current, mapsApp)} target="_blank" rel="noreferrer">
+          <Navigation size={16} /> Directions in {MAPS_APP_NAME[mapsApp]}
         </a>
       )}
       <p className="mt-3 text-xs t-sub">
-        Routes and timetables from {SOURCE_NAMES}. Times marked ~ are estimates from distance until a route loads.
+        Routes and timetables from {SOURCE_NAMES}. Times marked ~ are estimates from distance until a route loads. {MAPS_APP_NAME[mapsApp]} has live departures.
       </p>
     </Sheet>
   )

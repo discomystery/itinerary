@@ -4,13 +4,14 @@ import { helsinkiTrip } from '../data/helsinki'
 import { downloadTrip, parseTrip, shareLink } from '../lib/share'
 import { Download, Link2, Upload, X } from 'lucide-react'
 import { MODE_STYLE } from '../components/rail'
-import { MODES } from '../lib/transit'
+import { MAPS_APP_NAME, MODES, type MapsApp } from '../lib/transit'
 import { useStore } from '../store'
 import type { TransitMode } from '../types'
 
 export default function TripView() {
   const trip = useStore((s) => s.trip)
-  const { mutate, addPerson, updatePerson, removePerson, replaceTrip } = useStore()
+  const mapsApp = useStore((s) => s.mapsApp)
+  const { mutate, addPerson, updatePerson, removePerson, replaceTrip, setMapsApp } = useStore()
   const [newPerson, setNewPerson] = useState('')
   const [msg, setMsg] = useState<string | null>(null)
   const file = useRef<HTMLInputElement>(null)
@@ -38,6 +39,13 @@ export default function TripView() {
             value={trip.defaultMode}
             onChange={(defaultMode) => set({ defaultMode })}
             options={MODES.map((m) => { const M = MODE_STYLE[m]; return { value: m, label: <><M.Icon size={14} /> {M.name}</> } })}
+          />
+        </Field>
+        <Field label="Open directions in" hint="Just for this device.">
+          <Segmented<MapsApp>
+            value={mapsApp}
+            onChange={setMapsApp}
+            options={(['apple', 'google'] as const).map((a) => ({ value: a, label: MAPS_APP_NAME[a] }))}
           />
         </Field>
       </section>

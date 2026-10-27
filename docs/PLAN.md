@@ -28,7 +28,9 @@ the schedule zero, one, or many times.
   `opening_hours` when OSM has it), the `opening_hours` library to evaluate hours,
   and `suncalc` for daylight.
 - **Transit** uses real routes where it can (see *Real routing* below) and falls
-  back to an estimate (straight-line × detour ÷ mode speed + overhead).
+  back to an estimate (straight-line × detour ÷ mode speed + overhead). The
+  directions link opens Apple Maps or Google Maps (a per-device setting on Trip;
+  Apple Maps by default on iPhone, iPad and Mac).
 - **Running late suggests fixes** (shorten / move / skip / taxi) rather than just warning.
 
 ## v1 features (built)
@@ -77,7 +79,7 @@ the schedule zero, one, or many times.
   list or Google Maps links. Bullets, `#tags`, "Title – note", "Title (note)",
   a leading day ("Sat: …") and section headers ("Food:") are understood. Kind
   hints come from words like dinner, sauna, museum, bar, neighborhood, tickets.
-  Google Maps place links give the name and pin directly.
+  Google and Apple Maps place links give the name and pin directly.
 - Everything lands in an **Inbox**. Each idea is looked up on OpenStreetMap in
   the background (one per second, Nominatim's limit) to fill in the pin,
   address, hours and website.

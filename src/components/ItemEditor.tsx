@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Circle, CircleMarker, MapContainer, TileLayer, useMapEvents } from 'react-leaflet'
 import { hoursError, hoursSummary } from '../lib/hours'
 import { searchPlaces, type PlaceHit } from '../lib/places'
+import { MAPS_APP_NAME, placeUrl } from '../lib/transit'
 import { dayLabel, dayRange, fmtTime, parseHHMM, toHHMM } from '../lib/time'
 import { uid, useStore } from '../store'
 import type { Anchor, Item, ItemType, LatLng } from '../types'
@@ -210,6 +211,7 @@ function LocationPicker({ item, center, onChange }: { item: Item; center: LatLng
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const [showMap, setShowMap] = useState(false)
+  const mapsApp = useStore((s) => s.mapsApp)
 
   const search = async () => {
     if (!q.trim()) return
@@ -245,6 +247,7 @@ function LocationPicker({ item, center, onChange }: { item: Item; center: LatLng
       {item.location ? (
         <div className="mb-2 flex items-center gap-2 text-sm">
           <span className="flex min-w-0 flex-1 items-center gap-1.5 truncate"><MapPin size={14} className="flex-none t-sub" /> {item.address ?? `${item.location.lat.toFixed(4)}, ${item.location.lng.toFixed(4)}`}</span>
+          <a className="btn-ghost px-2 py-1 text-xs" href={placeUrl(item.title, item.location, mapsApp)} target="_blank" rel="noreferrer" title={`Open in ${MAPS_APP_NAME[mapsApp]}`}>Open <ExternalLink size={12} className="inline" /></a>
           <button className="btn-ghost px-2 py-1 text-xs" onClick={() => onChange({ location: undefined, address: undefined })}>Clear</button>
         </div>
       ) : (
