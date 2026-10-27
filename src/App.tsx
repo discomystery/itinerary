@@ -1,6 +1,6 @@
 import { CalendarDays, Lightbulb, type LucideIcon, Map as MapIcon, Timer, Undo2, Users } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import { Avatar, cx, Mark } from './components/ui'
+import { cx, Mark } from './components/ui'
 import { DetailPane, picked, TopTabs, UndoButton, WhoAmI } from './components/hub'
 import ItemEditor from './components/ItemEditor'
 import { type Tab, useStore } from './store'
@@ -23,7 +23,7 @@ const TABS: { id: Tab; Icon: LucideIcon; label: string }[] = [
 ]
 
 export default function App() {
-  const { tab, setTab, trip, viewer, setViewer, history: past, undo, editing, edit, selected } = useStore()
+  const { tab, setTab, trip, history: past, undo, editing, edit, selected } = useStore()
   const [shareMsg, setShareMsg] = useState<string | null>(null)
   const main = useRef<HTMLElement>(null)
   const layout = useLayout()
@@ -44,8 +44,6 @@ export default function App() {
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-
-  const me = trip.people.find((p) => p.id === viewer) ?? trip.people[0]
 
   const toast = shareMsg && (
     <button className="chrome px-3 py-2 text-left text-sm" style={{ color: '#15803d' }} onClick={() => setShareMsg(null)}>{shareMsg}</button>
@@ -97,16 +95,7 @@ export default function App() {
             <Undo2 size={17} />
           </button>
         )}
-        {me && (
-          <label className="flex items-center gap-1.5 rounded-full py-0.5 pl-0.5 pr-1.5 text-xs" title="Votes are cast as this person">
-            <Avatar person={me} size={22} />
-            <select className="bg-transparent font-semibold outline-none" value={me.id} onChange={(e) => setViewer(e.target.value)} aria-label="Voting as">
-              {trip.people.map((p) => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
-            </select>
-          </label>
-        )}
+        <WhoAmI />
       </header>
 
       {toast}

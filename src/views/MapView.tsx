@@ -1,9 +1,10 @@
 import L from 'leaflet'
 import { useEffect, useMemo, useState } from 'react'
 import { Circle, CircleMarker, MapContainer, Marker, Polyline, Popup, TileLayer, Tooltip, useMap } from 'react-leaflet'
-import { Flame } from 'lucide-react'
+import { Flame, Users } from 'lucide-react'
 import { clock, glyphFor } from '../components/objects'
 import { InterestPicker, Segmented, TYPE_META, VoteList } from '../components/ui'
+import { VotesSheet } from '../components/votes'
 import { hoursSummary } from '../lib/hours'
 import { dayBlocks, interestScore } from '../lib/schedule'
 import { dayLabel, dayRange } from '../lib/time'
@@ -52,10 +53,12 @@ export default function MapView({ embedded = false, defaultShow = 'day' }: { emb
   const trip = useStore((s) => s.trip)
   const day = useStore((s) => s.day)
   const viewer = useStore((s) => s.viewer)
+  const organizer = useStore((s) => s.organizer)
   const mapsApp = useStore((s) => s.mapsApp)
   const { setDay, setInterest, edit } = useStore()
   const [show, setShow] = useState<Show>(defaultShow)
   const [colorBy, setColorBy] = useState<ColorBy>('type')
+  const [votesFor, setVotesFor] = useState<Item | null>(null)
   const days = dayRange(trip.startDay, trip.endDay)
 
   const route = useMemo(() => dayBlocks(trip, day).map((b) => ({ b, item: trip.items.find((i) => i.id === b.itemId)! })).filter((x) => x.item?.location), [trip, day])
@@ -72,7 +75,9 @@ export default function MapView({ embedded = false, defaultShow = 'day' }: { emb
         {hoursSummary(i.hours, day, clock) && <div className="font-mono text-[11px] text-[#5a6371]">{dayLabel(day)}: {hoursSummary(i.hours, day, clock)}</div>}
         {i.address && <div className="text-xs text-[#5a6371]">{i.address}</div>}
         <VoteList item={i} people={trip.people} />
-        <InterestPicker size="sm" value={i.interest[viewer]} onChange={(v) => setInterest(i.id, viewer, v)} />
+        {organizer
+          ? <button className="btn-soft w-full py-1" onClick={() => setVotesFor(i)}><Users size={14} /> Set votes</button>
+          : <InterestPicker size="sm" value={i.interest[viewer]} onChange={(v) => setInterest(i.id, viewer, v)} />}
         <button className="btn-soft w-full py-1" onClick={() => edit(i.id)}>Open</button>
         {i.location && <a className="block text-center text-xs font-medium" style={{ color: 'var(--act)' }} href={placeUrl(i.title, i.location, mapsApp)} target="_blank" rel="noreferrer">Open in {MAPS_APP_NAME[mapsApp]}</a>}
       </div>
@@ -134,6 +139,7 @@ export default function MapView({ embedded = false, defaultShow = 'day' }: { emb
       {show === 'day' && route.length === 0 && (
         <div className="chrome absolute inset-x-0 bottom-3 z-[500] mx-auto w-fit rounded-lg px-3 py-2 text-sm shadow">Nothing with a location on {dayLabel(day)} yet</div>
       )}
+      {votesFor && <VotesSheet item={votesFor} onClose={() => setVotesFor(null)} />}
     </div>
   )
 }

@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react'
-import { CalendarPlus, Navigation, Pencil, Undo2, X } from 'lucide-react'
+import { CalendarPlus, ClipboardCheck, Navigation, Pencil, Undo2, X } from 'lucide-react'
 import { type ReactNode, useEffect, useMemo, useState } from 'react'
 import { clock, ObjectCard } from './objects'
 import { LegSheet } from './rail'
@@ -28,19 +28,29 @@ export function UndoButton() {
   )
 }
 
+const ORGANIZER = 'organizer'
+
+/** Who's using this device: a person whose votes you cast, or the organizer, who sets anyone's. */
 export function WhoAmI() {
   const trip = useStore((s) => s.trip)
   const viewer = useStore((s) => s.viewer)
-  const setViewer = useStore((s) => s.setViewer)
+  const organizer = useStore((s) => s.organizer)
+  const { setViewer, setOrganizer } = useStore()
   const me = trip.people.find((p) => p.id === viewer) ?? trip.people[0]
   if (!me) return null
   return (
-    <label className="flex items-center gap-1.5 rounded-full py-0.5 pl-0.5 pr-1.5 text-xs" title="Votes are cast as this person">
-      <Avatar person={me} size={22} />
-      <select className="bg-transparent font-semibold outline-none" value={me.id} onChange={(e) => setViewer(e.target.value)} aria-label="Voting as">
+    <label className={cx('whoami', organizer && 'org')} title={organizer ? 'Organizer: set anyone’s votes and who’s going' : 'Votes are cast as this person'}>
+      {organizer ? <span className="orgmark"><ClipboardCheck /></span> : <Avatar person={me} size={22} />}
+      <select
+        className="bg-transparent font-semibold outline-none"
+        value={organizer ? ORGANIZER : me.id}
+        onChange={(e) => (e.target.value === ORGANIZER ? setOrganizer(true) : setViewer(e.target.value))}
+        aria-label="Voting as"
+      >
         {trip.people.map((p) => (
           <option key={p.id} value={p.id}>{p.name}</option>
         ))}
+        <option value={ORGANIZER}>Organizer</option>
       </select>
     </label>
   )

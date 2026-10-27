@@ -1,11 +1,11 @@
-import { ArrowRight, Banknote, CalendarDays, CalendarPlus, ChevronRight, Clock, Ellipsis, GripVertical, List, Lock, LockOpen, MapPin, Navigation, Pencil, Plus, StickyNote, Trash2, TriangleAlert, Undo2 } from 'lucide-react'
+import { ArrowRight, Banknote, CalendarDays, CalendarPlus, ChevronRight, Clock, Ellipsis, GripVertical, List, Lock, LockOpen, MapPin, Navigation, Pencil, Plus, StickyNote, Trash2, TriangleAlert, Undo2, Users } from 'lucide-react'
 import { Fragment, type ReactNode, useMemo, useRef, useState } from 'react'
 import { clock, glyphFor, objectKind, ObjectCard } from '../components/objects'
 import { Horizon, LegPill, LegSheet, leaveAt, MODE_STYLE, RailGap, RailMark, railVars } from '../components/rail'
 import { PrintButton } from '../components/printout'
 import { Ribbons } from '../components/ribbons'
 import { Weather } from '../components/weather'
-import { cx, IssueList, Sheet, ViewHeader, Votes } from '../components/ui'
+import { Avatar, cx, IssueList, Sheet, ViewHeader, Votes } from '../components/ui'
 import { daylight, hoursSummary, openSpans, openStatus } from '../lib/hours'
 import { useFetchRoutes, useRoutes } from '../lib/routeCache'
 import { type DayAnalysis, type Leg, analyzeDay, anchorOnDay, anchoredSlot, findSlot, interestScore, makeCtx, worstSeverity } from '../lib/schedule'
@@ -589,6 +589,7 @@ export function BlockDetail({ id, analysis, onLeg, onEdit, card = true }: { id: 
             </button>
           </div>
         </div>
+        <WhoGoing block={b} />
         {leg && M && (
           <div className="pn">
             <div className="sl" style={{ margin: '0 0 8px' }}><span>Getting here</span><span className="truncate pl-2">from {from?.title}</span></div>
@@ -608,6 +609,38 @@ export function BlockDetail({ id, analysis, onLeg, onEdit, card = true }: { id: 
           </div>
         )}
       </div>
+  )
+}
+
+/** Who's on a plan. The organizer assigns it; everyone else sees it once it's narrowed down. */
+function WhoGoing({ block: b }: { block: Block }) {
+  const people = useStore((s) => s.trip.people)
+  const organizer = useStore((s) => s.organizer)
+  const updateBlock = useStore((s) => s.updateBlock)
+  const who = b.who?.length ? b.who : null
+  if (!organizer && !who) return null
+  const going = (id: string) => !who || who.includes(id)
+  // From "everyone", a tap picks just that person; after that, taps add and remove.
+  const toggle = (id: string) => {
+    const next = !who ? [id] : people.map((p) => p.id).filter((p) => (p === id ? !who.includes(p) : who.includes(p)))
+    // Nobody, or everybody, both mean the whole group.
+    updateBlock(b.id, { who: next.length && next.length < people.length ? next : undefined })
+  }
+  return (
+    <div className="pn">
+      <div className="sl" style={{ margin: '0 0 8px' }}>
+        <span>Who's going</span>
+        <span>{who ? `${who.length} of ${people.length}` : 'Everyone'}</span>
+      </div>
+      <div className="going">
+        {organizer && <button aria-pressed={!who} onClick={() => updateBlock(b.id, { who: undefined })}><Users /> Everyone</button>}
+        {people.map((p) => (
+          <button key={p.id} aria-pressed={!!who && going(p.id)} disabled={!organizer} onClick={() => toggle(p.id)} className={cx(!going(p.id) && 'out')}>
+            <Avatar person={p} size={20} /> {p.name}
+          </button>
+        ))}
+      </div>
+    </div>
   )
 }
 

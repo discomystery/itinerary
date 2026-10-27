@@ -1,8 +1,9 @@
-import { CalendarDays, CalendarPlus, ClipboardList, Heart, Plus, Search } from 'lucide-react'
+import { CalendarDays, CalendarPlus, ClipboardList, Heart, Plus, Search, Users } from 'lucide-react'
 import { InboxBanner, InboxReview, PasteSheet } from '../components/inbox'
-import { useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { clock, defaultEyebrow, glyphFor, objectKind } from '../components/objects'
-import { cx, INTEREST_META, INTERESTS, Sheet, ViewHeader, Votes } from '../components/ui'
+import { cx, INTEREST_META, Sheet, ViewHeader, Votes } from '../components/ui'
+import { VoteTray, VotesSheet } from '../components/votes'
 import { hoursSummary } from '../lib/hours'
 import { anchoredSlot, findSlot, interestScore } from '../lib/schedule'
 import { dayLabel, dayRange, fmtDuration } from '../lib/time'
@@ -23,12 +24,14 @@ const FILTERS: { id: Filter; label: string }[] = [
 export default function IdeasView() {
   const trip = useStore((s) => s.trip)
   const viewer = useStore((s) => s.viewer)
+  const organizer = useStore((s) => s.organizer)
   const { setInterest, edit, addItem } = useStore()
   const [filter, setFilter] = useState<Filter>('all')
   const [q, setQ] = useState('')
   const [scheduling, setScheduling] = useState<Item | null>(null)
   const [pasting, setPasting] = useState(false)
   const [reviewing, setReviewing] = useState(false)
+  const [votesFor, setVotesFor] = useState<Item | null>(null)
 
   const scheduledIds = new Set(trip.blocks.map((b) => b.itemId))
   const keep = (i: Item) => {
@@ -37,7 +40,7 @@ export default function IdeasView() {
       case 'unscheduled': return !scheduledIds.has(i.id)
       case 'must': return votes.includes('must')
       case 'everyone': return votes.every((v) => v === 'must' || v === 'yes')
-      case 'needsVote': return !i.interest[viewer]
+      case 'needsVote': return organizer ? votes.some((v) => !v) : !i.interest[viewer]
       case 'tbd': return !!i.tbd
       default: return true
     }
@@ -70,12 +73,16 @@ export default function IdeasView() {
         <InboxBanner onReview={() => setReviewing(true)} />
         <div className="tiles">
           {items.map((i) => (
-            <Tile key={i.id} trip={trip} item={i} vote={i.interest[viewer]} onVote={(v) => setInterest(i.id, viewer, v)} onOpen={() => edit(i.id)} onSchedule={() => setScheduling(i)} />
+            <Tile
+              key={i.id} trip={trip} item={i} vote={i.interest[viewer]} onVote={(v) => setInterest(i.id, viewer, v)}
+              onGroup={organizer ? () => setVotesFor(i) : undefined} onOpen={() => edit(i.id)} onSchedule={() => setScheduling(i)}
+            />
           ))}
         </div>
         {!items.length && <p className="py-8 text-center text-sm t-sub">Nothing here.</p>}
       </div>
       {scheduling && <ScheduleSheet trip={trip} item={scheduling} onClose={() => setScheduling(null)} />}
+      {votesFor && <VotesSheet item={votesFor} onClose={() => setVotesFor(null)} />}
       {pasting && <PasteSheet onClose={() => setPasting(false)} onAdded={() => setReviewing(true)} />}
       {reviewing && (
         <InboxReview
@@ -90,23 +97,23 @@ export default function IdeasView() {
   )
 }
 
-const nextVote = (v?: Interest): Interest | null => {
-  if (!v) return 'must'
-  const i = INTERESTS.indexOf(v)
-  return i === INTERESTS.length - 1 ? null : INTERESTS[i + 1]
-}
-
 /** A bold tile at one height: what it is, who's in, your vote, and its slot on the plan. */
-function Tile({ trip, item: i, vote, onVote, onOpen, onSchedule }: {
+/** With `onGroup` (organizer mode) the vote button shows how many have voted and opens everyone's votes. */
+function Tile({ trip, item: i, vote, onVote, onGroup, onOpen, onSchedule }: {
   trip: Trip
   item: Item
   vote?: Interest
   onVote: (v: Interest | null) => void
+  onGroup?: () => void
   onOpen: () => void
   onSchedule: () => void
 }) {
   const blocks = trip.blocks.filter((b) => b.itemId === i.id).sort((a, b) => a.day.localeCompare(b.day) || a.start - b.start)
+  const [picking, setPicking] = useState(false)
+  const voteBtn = useRef<HTMLButtonElement>(null)
+  const closeTray = useCallback(() => setPicking(false), [])
   const V = vote ? INTEREST_META[vote] : null
+  const voted = trip.people.filter((p) => i.interest[p.id]).length
   const k = objectKind(i)
   const Glyph = glyphFor(i)
   const first = blocks[0]
@@ -119,16 +126,30 @@ function Tile({ trip, item: i, vote, onVote, onOpen, onSchedule }: {
         {k === 'post' && <span className="stp stamp"><i><Glyph /></i></span>}
         <div className="vt">
           <Votes item={i} people={trip.people} />
-          <button
-            className={cx('myv', !V && 'none')}
-            style={V ? { background: V.color } : undefined}
-            onClick={(e) => { e.stopPropagation(); onVote(nextVote(vote)) }}
-            aria-label={V ? `Your vote: ${V.label}. Tap to change` : 'Vote'}
-            title={V ? V.label : 'Tap to vote'}
-          >
-            {V ? <V.Icon fill={vote === 'must' ? 'currentColor' : 'none'} /> : <Heart />}
-          </button>
+          {onGroup ? (
+            <button
+              className={cx('myv grp', voted < trip.people.length && 'todo')}
+              onClick={(e) => { e.stopPropagation(); onGroup() }}
+              aria-label={`${voted} of ${trip.people.length} have voted. Set votes`}
+              title="Set everyone's votes"
+            >
+              <Users /> {voted}/{trip.people.length}
+            </button>
+          ) : (
+            <button
+              ref={voteBtn}
+              className={cx('myv', !V && 'none')}
+              style={V ? { background: V.color } : undefined}
+              onClick={(e) => { e.stopPropagation(); setPicking(!picking) }}
+              aria-label={V ? `Your vote: ${V.label}. Change it` : 'Vote'}
+              aria-expanded={picking}
+              title={V ? V.label : 'Vote'}
+            >
+              {V ? <V.Icon fill={vote === 'must' ? 'currentColor' : 'none'} /> : <Heart />}
+            </button>
+          )}
         </div>
+        {picking && <VoteTray value={vote} onPick={onVote} onClose={closeTray} toggle={voteBtn} />}
       </div>
       {when ? (
         <button className="tf2b" onClick={(e) => { e.stopPropagation(); onSchedule() }} aria-label={`On the plan ${when}. Add another time`}><CalendarDays /><span>{when}</span></button>
