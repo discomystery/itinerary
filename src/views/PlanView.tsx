@@ -18,7 +18,8 @@ const GUTTER = 42
 
 type Mode = 'list' | 'day'
 
-export default function PlanView() {
+/** `hideDays` drops the day strip where a sidebar already lists the days. */
+export default function PlanView({ hideDays = false }: { hideDays?: boolean }) {
   const trip = useStore((s) => s.trip)
   const day = useStore((s) => s.day)
   const setDay = useStore((s) => s.setDay)
@@ -56,7 +57,7 @@ export default function PlanView() {
   return (
     <div>
       <ViewHeader
-        top={<DayStrip days={days} day={day} setDay={setDay} analyses={analyses} />}
+        top={!hideDays && <DayStrip days={days} day={day} setDay={setDay} analyses={analyses} />}
         title={dayLabel(day).replace(',', '')}
         right={
           <>

@@ -1,10 +1,12 @@
 import { CalendarDays, Lightbulb, type LucideIcon, Map as MapIcon, Timer, Undo2, Users } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Avatar, cx, Mark } from './components/ui'
+import { PlanAside, Sidebar, TopTabs, UndoButton, WhoAmI } from './components/hub'
 import ItemEditor from './components/ItemEditor'
 import { type Tab, useStore } from './store'
 import { importFromHash } from './lib/share'
 import { useInboxLookups } from './lib/useInboxLookups'
+import { useLayout } from './lib/useLayout'
 import IdeasView from './views/IdeasView'
 import MapView from './views/MapView'
 import NowView from './views/NowView'
@@ -23,11 +25,12 @@ export default function App() {
   const { tab, setTab, trip, viewer, setViewer, history: past, undo, editing, edit } = useStore()
   const [shareMsg, setShareMsg] = useState<string | null>(null)
   const main = useRef<HTMLElement>(null)
+  const layout = useLayout()
   useInboxLookups()
   // Each tab opens at its top.
   useEffect(() => {
     main.current?.scrollTo(0, 0)
-  }, [tab])
+  }, [tab, layout])
 
   useEffect(() => {
     importFromHash().then((t) => {
@@ -42,6 +45,48 @@ export default function App() {
   }, [])
 
   const me = trip.people.find((p) => p.id === viewer) ?? trip.people[0]
+
+  const toast = shareMsg && (
+    <button className="chrome px-3 py-2 text-left text-sm" style={{ color: '#15803d' }} onClick={() => setShareMsg(null)}>{shareMsg}</button>
+  )
+
+  if (layout !== 'phone') {
+    // Plan sits beside a map (tablet) or a Map/Ideas pane (desk); Ideas sits beside the map on desk.
+    const mapPane = (all: boolean) => (
+      <section className="pane aside" aria-label="Map">
+        <div className="ab overflow-hidden"><MapView embedded defaultShow={all ? 'all' : 'day'} /></div>
+      </section>
+    )
+    const aside = tab === 'plan' ? (layout === 'desk' ? <PlanAside /> : mapPane(false)) : tab === 'ideas' && layout === 'desk' ? mapPane(true) : null
+    return (
+      <div className={cx('hub', `l-${layout}`)}>
+        {layout === 'desk' ? (
+          <Sidebar tabs={TABS} />
+        ) : (
+          <header className="topbar chrome">
+            <div className="min-w-0 flex-1" title={trip.name}><Mark /></div>
+            <TopTabs tabs={TABS} />
+            <div className="flex flex-1 items-center justify-end gap-2">
+              <UndoButton />
+              <WhoAmI />
+            </div>
+          </header>
+        )}
+        <div className="panes">
+          <main ref={main} className={cx('pane', tab === 'map' ? 'overflow-hidden' : 'overflow-y-auto')}>
+            {toast}
+            {tab === 'now' && <NowView />}
+            {tab === 'plan' && <PlanView hideDays={layout === 'desk'} />}
+            {tab === 'map' && <MapView embedded={layout === 'desk'} />}
+            {tab === 'ideas' && <IdeasView />}
+            {tab === 'trip' && <TripView />}
+          </main>
+          {aside}
+        </div>
+        {editing && <ItemEditor id={editing} onClose={() => edit(null)} />}
+      </div>
+    )
+  }
 
   return (
     <div className="mx-auto flex h-full max-w-3xl flex-col">
@@ -64,9 +109,7 @@ export default function App() {
         )}
       </header>
 
-      {shareMsg && (
-        <button className="chrome px-3 py-2 text-left text-sm" style={{ color: '#15803d' }} onClick={() => setShareMsg(null)}>{shareMsg}</button>
-      )}
+      {toast}
 
       <main ref={main} className={cx('min-h-0 flex-1', tab === 'map' ? 'overflow-hidden' : 'overflow-y-auto')}>
         {tab === 'now' && <NowView />}
