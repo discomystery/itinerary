@@ -2,11 +2,14 @@ import { CarTaxiFront, ChevronRight, Footprints, type LucideIcon, Navigation, Su
 import type { CSSProperties } from 'react'
 import { daylight } from '../lib/hours'
 import { useFetchRoutes, useRoutes } from '../lib/routeCache'
+import { delayText } from '../lib/routing'
+import { useDepartures } from '../lib/useDepartures'
+import { useNow } from '../lib/useNow'
 import { type Leg, makeCtx } from '../lib/schedule'
 import { fmtDistance, directionsUrl, MAPS_APP_NAME, MODES } from '../lib/transit'
 import { fmtDuration } from '../lib/time'
 import { itemById, useStore } from '../store'
-import type { Block, TransitMode, Trip } from '../types'
+import type { Block, LatLng, TransitMode, Trip } from '../types'
 import { clock } from './objects'
 import { cx, Sheet } from './ui'
 
@@ -110,6 +113,7 @@ export function LegSheet({ leg, onClose }: { leg: Leg; onClose: () => void }) {
     return { mode, r, mins, leave, short: from.end - leave }
   })
   useFetchRoutes([...ctx.missing.values()])
+  const fromLoc = ctx.locEnd(from)
   return (
     <Sheet open onClose={onClose} title={`${fromItem.title} → ${toItem.title}`}>
       <p className="mb-3 text-sm t-sub">
@@ -142,6 +146,9 @@ export function LegSheet({ leg, onClose }: { leg: Leg; onClose: () => void }) {
           )
         })}
       </div>
+      {fromLoc && toItem.location && (current === 'transit' || options.some((o) => o.mode === 'transit' && o.r?.line)) && (
+        <Departures from={fromLoc} to={toItem.location} free={from.end} arriveBy={to.start} day={to.day} tz={trip.timezone} />
+      )}
       {toItem.location && (
         <a className="btn mt-4 w-full py-3" href={directionsUrl(fromItem.location, toItem.location, current, mapsApp)} target="_blank" rel="noreferrer">
           <Navigation size={16} /> Directions in {MAPS_APP_NAME[mapsApp]}
@@ -155,3 +162,33 @@ export function LegSheet({ leg, onClose }: { leg: Leg; onClose: () => void }) {
 }
 
 const SOURCE_NAMES = 'OpenStreetMap, HSL and Transitous'
+
+/** The next few departures once you're free, live (with delays) when it's today and close. */
+function Departures({ from, to, free, arriveBy, day, tz }: { from: LatLng; to: LatLng; free: number; arriveBy: number; day: string; tz: string }) {
+  const now = useNow()
+  const today = now.day === day
+  const after = Math.floor((today ? Math.max(now.min, free - 10) : free - 10) / 5) * 5
+  const live = today && !now.simulated && after - now.min < 60
+  const { deps, failed } = useDepartures({ from, to, day, after, window: Math.max(30, arriveBy - after + 30), timezone: tz }, live)
+  const rows = deps?.slice(0, 4)
+  return (
+    <div className="mt-4">
+      <div className="label mb-1.5">Departures{live ? ' · live' : ''}</div>
+      {!deps && <p className="text-xs t-sub">{failed ? "Couldn't load departures." : 'Loading…'}</p>}
+      {rows && !rows.length && <p className="text-xs t-sub">No transit departures found.</p>}
+      {rows?.map((d) => {
+        const late = d.arrive > arriveBy
+        return (
+          <div key={`${d.depart}${d.line}`} className="grid grid-cols-[52px_1fr_auto] items-baseline gap-2 py-1 font-mono text-xs">
+            <b className="text-sm">{clock(d.depart)}</b>
+            <span className="truncate">
+              <span className="font-sans font-semibold">{d.line}</span>
+              <span className="t-sub"> · {delayText(d)}</span>
+            </span>
+            <span style={{ color: late ? '#b45309' : undefined }}>arr {clock(d.arrive)}</span>
+          </div>
+        )
+      })}
+    </div>
+  )
+}

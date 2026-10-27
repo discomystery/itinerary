@@ -31,7 +31,7 @@ export const useRoutes = create<RouteState>()(
         }),
       clear: () => set({ routes: {} }),
     }),
-    { name: 'itinerary-routes-v1' },
+    { name: 'itinerary-routes-v2' },
   ),
 )
 

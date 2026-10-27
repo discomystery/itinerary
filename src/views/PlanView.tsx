@@ -1,15 +1,20 @@
-import { ArrowRight, CalendarDays, ChevronRight, Clock, Ellipsis, GripVertical, List, Lock, LockOpen, MapPin, Navigation, Pencil, Plus, StickyNote, Trash2, TriangleAlert, Undo2 } from 'lucide-react'
+import { ArrowRight, Banknote, CalendarDays, CalendarPlus, ChevronRight, Clock, Ellipsis, GripVertical, List, Lock, LockOpen, MapPin, Navigation, Pencil, Plus, StickyNote, Trash2, TriangleAlert, Undo2 } from 'lucide-react'
 import { Fragment, type ReactNode, useMemo, useRef, useState } from 'react'
 import { clock, glyphFor, objectKind, ObjectCard } from '../components/objects'
 import { Horizon, LegPill, LegSheet, leaveAt, MODE_STYLE, RailGap, RailMark, railVars } from '../components/rail'
+import { PrintButton } from '../components/printout'
 import { Ribbons } from '../components/ribbons'
+import { Weather } from '../components/weather'
 import { cx, IssueList, Sheet, ViewHeader, Votes } from '../components/ui'
 import { daylight, hoursSummary, openSpans, openStatus } from '../lib/hours'
 import { useFetchRoutes, useRoutes } from '../lib/routeCache'
 import { type DayAnalysis, type Leg, analyzeDay, anchorOnDay, anchoredSlot, findSlot, interestScore, makeCtx, worstSeverity } from '../lib/schedule'
 import { dayLabel, dayRange, fmtDuration, parseHHMM, snap, toHHMM } from '../lib/time'
+import { costOf, currencyOf, fmtMoney, tripCosts } from '../lib/costs'
+import { downloadCalendar } from '../lib/ics'
 import { directionsUrl } from '../lib/transit'
 import { useNow } from '../lib/useNow'
+import { useWeather } from '../lib/weather'
 import { ideas, itemById, useStore } from '../store'
 import type { Block, Item, TransitMode, Trip } from '../types'
 
@@ -32,6 +37,12 @@ export default function PlanView() {
   // Fetch the whole trip's legs, so issue dots on other days are real too.
   useFetchRoutes(Object.values(analyses).flatMap((a) => a.missing))
   const now = useNow()
+  const weather = useWeather(trip)
+  const spend = useMemo(() => tripCosts(trip).byDay[day], [trip, day])
+  const sub = [
+    weather[day] && <Weather key="w" w={weather[day]} />,
+    spend && <span key="c">{fmtMoney(spend.each, currencyOf(trip))} each</span>,
+  ].filter(Boolean)
   const [mode, setMode] = useState<Mode>(() => {
     try {
       return (localStorage.getItem('plan-mode') as Mode) || 'list'
@@ -58,12 +69,14 @@ export default function PlanView() {
       <ViewHeader
         top={<DayStrip days={days} day={day} setDay={setDay} analyses={analyses} />}
         title={dayLabel(day).replace(',', '')}
+        sub={sub.length > 0 && sub.flatMap((x, n) => (n ? [' · ', x] : [x]))}
         right={
           <>
             <span className="seg3">
               <button aria-pressed={mode === 'list'} onClick={() => pick('list')} title="List" aria-label="List"><List /></button>
               <button aria-pressed={mode === 'day'} onClick={() => pick('day')} title="Day" aria-label="Day"><CalendarDays /></button>
             </span>
+            <PrintButton trip={trip} day={day} weather={weather} />
             <button className="fab" onClick={() => setAddAt(-1)} aria-label="Add to this day"><Plus /></button>
           </>
         }
@@ -165,7 +178,7 @@ export function ListView({ trip, day, analysis, unfolded, selected, onToggle, on
     const leg = legByTo.get(b.id)
     const from = leg && trip.blocks.find((x) => x.id === leg.fromId)
     const to = ctx.loc(b)
-    const dir = to ? directionsUrl(from ? ctx.loc(from) : undefined, to, leg?.mode ?? trip.defaultMode, mapsApp) : undefined
+    const dir = to ? directionsUrl(from ? ctx.locEnd(from) : undefined, to, leg?.mode ?? trip.defaultMode, mapsApp) : undefined
     const open = unfolded === b.id
     rows.push({
       key: b.id,
@@ -525,6 +538,7 @@ export function BlockDetail({ id, analysis, onLeg, onEdit, card = true }: { id: 
   const leg = analysis.legs.find((l) => l.toId === b.id)
   const from = leg && itemById(trip, trip.blocks.find((x) => x.id === leg.fromId)?.itemId ?? '')
   const hours = hoursSummary(item.hours, b.day, clock)
+  const cost = costOf(trip, item, b)
   const M = leg ? MODE_STYLE[leg.mode] : null
 
   return (
@@ -585,9 +599,10 @@ export function BlockDetail({ id, analysis, onLeg, onEdit, card = true }: { id: 
             </button>
           </div>
         )}
-        {(hours || item.address || (item.notes && objectKind(item) !== 'post')) && (
+        {(hours || item.address || cost || (item.notes && objectKind(item) !== 'post')) && (
           <div className="facts2">
             {hours && <div><Clock /> {hours}{item.hoursSource === 'unverified' && ' (unverified)'}</div>}
+            {cost && <div><Banknote /> {fmtMoney(cost.each, currencyOf(trip))} each · {fmtMoney(cost.total, currencyOf(trip))} for the group</div>}
             {item.address && <div><MapPin /> {item.address}</div>}
             {item.notes && objectKind(item) !== 'post' && <div><StickyNote /> <span className="whitespace-pre-wrap">{item.notes}</span></div>}
           </div>
@@ -607,6 +622,7 @@ function MoreSheet({ id, onClose, onWhen }: { id: string; onClose: () => void; o
       <div className="menu">
         <button onClick={onWhen}><CalendarDays />Change the day or time</button>
         <button onClick={() => { onClose(); edit(item.id) }}><Pencil />Edit the card</button>
+        <button onClick={() => { downloadCalendar(trip, [b], item.title); onClose() }}><CalendarPlus />Add to calendar</button>
         <button onClick={() => { removeBlock(b.id); onClose() }}><Undo2 />Unschedule (keep the idea)</button>
         <button className="danger" onClick={() => { if (confirm(`Delete “${item.title}” from the trip?`)) { deleteItem(item.id); onClose() } }}><Trash2 />Delete the idea</button>
       </div>

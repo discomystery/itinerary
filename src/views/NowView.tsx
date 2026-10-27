@@ -4,17 +4,32 @@ import { Clock, clock, glyphFor, ObjectCard } from '../components/objects'
 import { Horizon, leaveAt, LegPill, LegSheet, MODE_STYLE } from '../components/rail'
 import { Ribbons } from '../components/ribbons'
 import { RouteCard } from '../components/route'
+import { Weather } from '../components/weather'
 import { cx, Sheet, ViewHeader, Votes } from '../components/ui'
 import { cardKind, det } from '../lib/cards'
 import { daylight, hoursSummary, openStatus } from '../lib/hours'
 import { applyDay, runningLate, type LateResult } from '../lib/reflow'
 import { useFetchRoutes, useRoutes } from '../lib/routeCache'
+import { bestDeparture, type Departure, delayText } from '../lib/routing'
+import { useDepartures } from '../lib/useDepartures'
 import { analyzeDay, anchorOnDay, dayBlocks, interestScore, type Leg, makeCtx } from '../lib/schedule'
 import { dayLabel, fmtDuration, toHHMM, wallToUtc } from '../lib/time'
 import { directionsUrl, distanceMeters, fmtDistance, suggestMode, travelMinutes } from '../lib/transit'
+import { flightStatus, isFlight } from '../lib/flights'
 import { useNow } from '../lib/useNow'
+import { useWeather } from '../lib/weather'
 import { ideas, itemById, useStore } from '../store'
-import type { Block, LatLng } from '../types'
+import type { Block, Item, LatLng } from '../types'
+
+/** "Now · 2h left", or for a flight, which leg you're on or how long the layover has left. */
+function nowEyebrow(item: Item, left: number, utc: number, tz: string): string {
+  if (isFlight(item)) {
+    const st = flightStatus(item.legs, utc, tz)
+    if (st.kind === 'leg') return `Now · ${st.leg.flightNo ? `${st.leg.flightNo} ` : ''}to ${st.leg.to.toUpperCase()} · lands in ${fmtDuration(st.minutesLeft)}`
+    if (st.kind === 'layover') return `Now · layover in ${st.layover.at} · next flight in ${fmtDuration(st.minutesLeft)}`
+  }
+  return `Now · ${fmtDuration(left)} left`
+}
 
 export default function NowView() {
   const trip = useStore((s) => s.trip)
@@ -22,6 +37,7 @@ export default function NowView() {
   const setDay = useStore((s) => s.setDay)
   const mapsApp = useStore((s) => s.mapsApp)
   const now = useNow()
+  const weather = useWeather(trip)
   const [openLeg, setOpenLeg] = useState<Leg | null>(null)
   const [late, setLate] = useState<number | null>(null)
   const inTrip = now.day >= trip.startDay && now.day <= trip.endDay
@@ -34,7 +50,7 @@ export default function NowView() {
   const upcoming = today.filter((b) => b.start > now.min)
   const next = upcoming[0]
   const prevLoc = [...today].reverse().find((b) => b.start <= now.min && ctx.loc(b))
-  const here = (current && ctx.loc(current)) ?? (prevLoc && ctx.loc(prevLoc)) ?? trip.center
+  const here = (current && ctx.loc(current)) ?? (prevLoc && ctx.locEnd(prevLoc)) ?? trip.center
   const legTo = (b?: Block) => (b ? analysis.legs.find((l) => l.toId === b.id && l.minutes > 0) : undefined)
   const open = (b: Block) => {
     setDay(b.day)
@@ -51,6 +67,14 @@ export default function NowView() {
   const nextLeg = legTo(next)
   const nextItem = next && itemById(trip, next.itemId)
   const nextLoc = next && ctx.loc(next)
+  // Within 45 minutes of leaving on transit, swap the timetable for live departures.
+  const plannedLeave = next ? (nextLeg ? leaveAt(trip, nextLeg) : next.start) : 0
+  const liveLeg = !!(next && nextLoc && nextLeg?.mode === 'transit' && plannedLeave - now.min <= 45)
+  const { deps } = useDepartures(
+    liveLeg ? { from: here, to: nextLoc!, day: now.day, after: Math.floor(now.min / 5) * 5, window: next!.start - now.min + 15, timezone: trip.timezone } : null,
+    !now.simulated,
+  )
+  const dep = liveLeg && deps ? bestDeparture(deps, next!.start) : undefined
   const legsLeft = analysis.legs.filter((l) => l.minutes > 0 && (trip.blocks.find((b) => b.id === l.toId)?.start ?? 0) > now.min)
   // Show the plan in progress, then the next few, with the legs between them.
   const list = [current, ...upcoming].filter((b): b is Block => !!b).slice(0, 3)
@@ -59,7 +83,7 @@ export default function NowView() {
     <div>
       <ViewHeader
         title="Now"
-        sub={<>{dayLabel(now.day, 'long').split(',')[0]} · {clock(now.min)} {city} time{now.simulated && <b style={{ color: '#7c5cd6' }}> · pretend</b>}</>}
+        sub={<>{dayLabel(now.day, 'long').split(',')[0]} · {clock(now.min)} {city} time{now.simulated && <b style={{ color: '#7c5cd6' }}> · pretend</b>}{inTrip && weather[now.day] && <> · <Weather w={weather[now.day]} compact /></>}</>}
         right={<button className="ib" onClick={() => setTab('map')} aria-label="Map"><MapIcon /></button>}
       >
         {inTrip && <Horizon trip={trip} day={now.day} now={now.min} />}
@@ -74,9 +98,13 @@ export default function NowView() {
               <RouteCard
                 title={nextItem.title}
                 now={now.min}
-                leave={nextLeg ? leaveAt(trip, nextLeg) : next.start}
+                leave={dep?.leave ?? plannedLeave}
                 arrive={next.start}
-                leg={nextLeg ? `${nextLeg.line ?? MODE_STYLE[nextLeg.mode].name} ${nextLeg.minutes} min` : undefined}
+                leg={
+                  dep
+                    ? `${dep.line} at ${clock(dep.depart)} · ${delayText(dep)}${dep.arrive > next.start ? ` · arrives ${clock(dep.arrive)}` : ''}`
+                    : nextLeg ? `${nextLeg.line ?? MODE_STYLE[nextLeg.mode].name} ${nextLeg.minutes} min` : undefined
+                }
                 color={nextLeg ? MODE_STYLE[nextLeg.mode].c : undefined}
                 directions={nextLoc ? directionsUrl(here, nextLoc, nextLeg?.mode ?? trip.defaultMode, mapsApp) : undefined}
                 onLate={setLate}
@@ -109,7 +137,7 @@ export default function NowView() {
                     block={b}
                     tz={trip.timezone}
                     issues={analysis.issues.get(b.id)}
-                    eyebrow={b === current ? `Now · ${fmtDuration(b.end - now.min)} left` : undefined}
+                    eyebrow={b === current ? nowEyebrow(itemById(trip, b.itemId)!, b.end - now.min, wallToUtc(trip.timezone, now.day, now.min), trip.timezone) : undefined}
                     onClick={() => open(b)}
                   />
                 </div>
@@ -122,7 +150,9 @@ export default function NowView() {
         )}
       </div>
       {openLeg && <LegSheet leg={openLeg} onClose={() => setOpenLeg(null)} />}
-      {late != null && <RunningLate day={now.day} now={now.min} initial={late} onClose={() => setLate(null)} />}
+      {late != null && (
+        <RunningLate day={now.day} now={now.min} initial={late} leave={plannedLeave} arriveBy={next?.start} deps={liveLeg ? deps : null} onClose={() => setLate(null)} />
+      )}
     </div>
   )
 }
@@ -209,7 +239,17 @@ function SimControl({ inTrip }: { inTrip: boolean }) {
   )
 }
 
-function RunningLate({ day, now, initial, onClose }: { day: string; now: number; initial: number; onClose: () => void }) {
+function RunningLate({ day, now, initial, leave, arriveBy, deps, onClose }: {
+  day: string
+  now: number
+  initial: number
+  /** Planned time to leave for the next plan, and when it starts. */
+  leave: number
+  arriveBy?: number
+  /** Live transit departures for that leg, if it's transit and close. */
+  deps: Departure[] | null
+  onClose: () => void
+}) {
   const trip = useStore((s) => s.trip)
   const setBlocks = useStore((s) => s.setBlocks)
   const [delay, setDelay] = useState<number>(initial)
@@ -232,6 +272,7 @@ function RunningLate({ day, now, initial, onClose }: { day: string; now: number;
           ))}
         </div>
       </div>
+      {deps && arriveBy != null && <NextDeparture deps={deps} ready={Math.max(now, leave + delay)} arriveBy={arriveBy} />}
       {done && (
         <div className="mt-3 flex flex-col gap-3">
           <p className="text-sm" style={{ color: '#15803d' }}>Done: {done}. Undo is at the top if you change your mind.</p>
@@ -272,6 +313,19 @@ function RunningLate({ day, now, initial, onClose }: { day: string; now: number;
         </div>
       )}
     </Sheet>
+  )
+}
+
+/** The first departure you can still catch when you're this late, and what it does to your arrival. */
+function NextDeparture({ deps, ready, arriveBy }: { deps: Departure[]; ready: number; arriveBy: number }) {
+  const d = deps.find((x) => x.leave >= ready)
+  if (!d) return null
+  const late = d.arrive - arriveBy
+  return (
+    <p className="mt-3 text-sm">
+      Next you can catch: <b>{d.line}</b> at {clock(d.depart)} ({delayText(d)}), leave by {clock(d.leave)}.{' '}
+      <span className="t-sub">{late > 0 ? `Arrives ${clock(d.arrive)}, ${late} min after the start.` : `Arrives ${clock(d.arrive)}, still in time.`}</span>
+    </p>
   )
 }
 

@@ -104,6 +104,8 @@ async function fetchTransitous(req: RouteRequest, signal?: AbortSignal): Promise
     time: arriveByIso(req),
     arriveBy: 'true',
     numItineraries: '1',
+    maxItineraries: '3',
+    detailedTransfers: 'false',
   })
   const data = await json(`https://api.transitous.org/api/v5/plan?${p}`, { signal })
   return parseTransitous(data, req)
@@ -116,7 +118,8 @@ export function parseTransitous(data: any, req: RouteRequest): Route | null {
   const it = its.sort((x, y) => Date.parse(y.startTime) - Date.parse(x.startTime))[0]
   if (!it) return null
   const lines = (it.legs ?? []).filter((l: any) => !STREET.has(l.mode)).map((l: any) => lineName(l.mode, l.routeShortName || l.displayName))
-  return transitRoute(it.startTime, it.duration, sumDistance(it.legs), lines, 'transitous', req)
+  // Transitous only gives distances for the walking parts, so leave meters to the map.
+  return transitRoute(it.startTime, it.duration, undefined, lines, 'transitous', req)
 }
 
 const PLAN_QUERY = `query($from: PlanCoordinateInput!, $to: PlanCoordinateInput!, $at: OffsetDateTime!) {
@@ -186,4 +189,89 @@ function transitRoute(start: string, durationSec: number, meters: number | undef
 /** Whole days from `a` to `b` (ISO dates). */
 function dayDiff(a: string, b: string): number {
   return Math.round((Date.parse(b) - Date.parse(a)) / 86_400_000)
+}
+
+// --- Live departures --------------------------------------------------------
+
+/** One way to make a transit leg, with live delay when the operator shares it. */
+export interface Departure {
+  /** When to set off (wall minutes on `day`), including the walk to the stop. */
+  leave: number
+  /** When the first vehicle actually departs. */
+  depart: number
+  arrive: number
+  line?: string
+  /** Minutes behind schedule for the first vehicle (negative = early). */
+  delay: number
+  realTime: boolean
+}
+
+export interface DepartureQuery {
+  from: LatLng
+  to: LatLng
+  day: string
+  /** Departures leaving at or after this wall time. */
+  after: number
+  /** How far ahead to look, in minutes. */
+  window: number
+  timezone: string
+}
+
+export async function fetchDepartures(q: DepartureQuery, signal?: AbortSignal): Promise<Departure[]> {
+  const p = new URLSearchParams({
+    fromPlace: `${q.from.lat},${q.from.lng}`,
+    toPlace: `${q.to.lat},${q.to.lng}`,
+    time: new Date(wallToUtc(q.timezone, q.day, q.after)).toISOString(),
+    searchWindow: String(Math.round(Math.min(120, Math.max(15, q.window)) * 60)),
+    numItineraries: '4',
+    maxItineraries: '6',
+    detailedTransfers: 'false',
+  })
+  const data = await json(`https://api.transitous.org/api/v5/plan?${p}`, { signal })
+  return parseDepartures(data, q.day, q.timezone)
+}
+
+export function parseDepartures(data: any, day: string, timezone: string): Departure[] {
+  const wall = (iso: string) => {
+    const w = utcToWall(timezone, Date.parse(iso))
+    return w.min + dayDiff(day, w.day) * 1440
+  }
+  const out: Departure[] = []
+  for (const it of data?.itineraries ?? []) {
+    const rides = (it.legs ?? []).filter((l: any) => !STREET.has(l.mode))
+    const first = rides[0]
+    if (!first) continue
+    const lines = rides.map((l: any) => lineName(l.mode, l.routeShortName || l.displayName))
+    out.push({
+      leave: wall(it.startTime),
+      depart: wall(first.startTime),
+      arrive: wall(it.endTime),
+      line: lines.slice(0, 2).join(' → ') + (lines.length > 2 ? ' …' : ''),
+      delay: first.scheduledStartTime ? Math.round((Date.parse(first.startTime) - Date.parse(first.scheduledStartTime)) / 60000) : 0,
+      realTime: rides.some((l: any) => l.realTime),
+    })
+  }
+  // One row per departure, earliest first.
+  const seen = new Set<string>()
+  return out
+    .sort((a, b) => a.depart - b.depart || a.arrive - b.arrive)
+    .filter((d) => {
+      const k = `${d.depart}|${d.line}`
+      if (seen.has(k)) return false
+      seen.add(k)
+      return true
+    })
+}
+
+/** The latest departure that still arrives in time, else the soonest one. */
+export function bestDeparture(deps: Departure[], arriveBy: number): Departure | undefined {
+  const ok = deps.filter((d) => d.arrive <= arriveBy)
+  return ok.length ? ok.reduce((a, b) => (b.leave > a.leave ? b : a)) : deps[0]
+}
+
+export function delayText(d: Departure): string {
+  if (!d.realTime) return 'scheduled'
+  if (d.delay >= 1) return `${d.delay} min late`
+  if (d.delay <= -1) return `${-d.delay} min early`
+  return 'on time'
 }
