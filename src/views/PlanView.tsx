@@ -1,4 +1,4 @@
-import { ArrowRight, CalendarDays, CalendarPlus, ChevronRight, Clock, Ellipsis, GripVertical, List, Lock, LockOpen, MapPin, Navigation, Pencil, Plus, StickyNote, Trash2, TriangleAlert, Undo2 } from 'lucide-react'
+import { ArrowRight, Banknote, CalendarDays, CalendarPlus, ChevronRight, Clock, Ellipsis, GripVertical, List, Lock, LockOpen, MapPin, Navigation, Pencil, Plus, StickyNote, Trash2, TriangleAlert, Undo2 } from 'lucide-react'
 import { Fragment, type ReactNode, useMemo, useRef, useState } from 'react'
 import { clock, glyphFor, objectKind, ObjectCard } from '../components/objects'
 import { Horizon, LegPill, LegSheet, leaveAt, MODE_STYLE, RailGap, RailMark, railVars } from '../components/rail'
@@ -8,6 +8,7 @@ import { cx, IssueList, Sheet, ViewHeader, Votes } from '../components/ui'
 import { daylight, hoursSummary, openSpans, openStatus } from '../lib/hours'
 import { type DayAnalysis, type Leg, analyzeDay, anchorOnDay, anchoredSlot, findSlot, interestScore, makeCtx, worstSeverity } from '../lib/schedule'
 import { dayLabel, dayRange, fmtDuration, parseHHMM, snap, toHHMM } from '../lib/time'
+import { costOf, currencyOf, fmtMoney, tripCosts } from '../lib/costs'
 import { downloadCalendar } from '../lib/ics'
 import { directionsUrl } from '../lib/transit'
 import { useNow } from '../lib/useNow'
@@ -29,6 +30,11 @@ export default function PlanView() {
   const analysis = analyses[day] ?? analyzeDay(trip, day)
   const now = useNow()
   const weather = useWeather(trip)
+  const spend = useMemo(() => tripCosts(trip).byDay[day], [trip, day])
+  const sub = [
+    weather[day] && <Weather key="w" w={weather[day]} />,
+    spend && <span key="c">{fmtMoney(spend.each, currencyOf(trip))} each</span>,
+  ].filter(Boolean)
   const [mode, setMode] = useState<Mode>(() => {
     try {
       return (localStorage.getItem('plan-mode') as Mode) || 'list'
@@ -55,7 +61,7 @@ export default function PlanView() {
       <ViewHeader
         top={<DayStrip days={days} day={day} setDay={setDay} analyses={analyses} />}
         title={dayLabel(day).replace(',', '')}
-        sub={weather[day] && <Weather w={weather[day]} />}
+        sub={sub.length > 0 && sub.flatMap((x, n) => (n ? [' · ', x] : [x]))}
         right={
           <>
             <span className="seg3">
@@ -493,6 +499,7 @@ function BlockSheet({ id, analysis, onClose, onLeg }: { id: string; analysis: Da
   const leg = analysis.legs.find((l) => l.toId === b.id)
   const from = leg && itemById(trip, trip.blocks.find((x) => x.id === leg.fromId)?.itemId ?? '')
   const hours = hoursSummary(item.hours, b.day, clock)
+  const cost = costOf(trip, item, b)
   const M = leg ? MODE_STYLE[leg.mode] : null
 
   return (
@@ -564,9 +571,10 @@ function BlockSheet({ id, analysis, onClose, onLeg }: { id: string; analysis: Da
             </button>
           </div>
         )}
-        {(hours || item.address || (item.notes && objectKind(item) !== 'post')) && (
+        {(hours || item.address || cost || (item.notes && objectKind(item) !== 'post')) && (
           <div className="facts2">
             {hours && <div><Clock /> {hours}{item.hoursSource === 'unverified' && ' (unverified)'}</div>}
+            {cost && <div><Banknote /> {fmtMoney(cost.each, currencyOf(trip))} each · {fmtMoney(cost.total, currencyOf(trip))} for the group</div>}
             {item.address && <div><MapPin /> {item.address}</div>}
             {item.notes && objectKind(item) !== 'post' && <div><StickyNote /> <span className="whitespace-pre-wrap">{item.notes}</span></div>}
           </div>
