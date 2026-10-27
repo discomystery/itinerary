@@ -2,6 +2,7 @@ import { ArrowRight, Banknote, CalendarDays, CalendarPlus, ChevronRight, Clock, 
 import { Fragment, type ReactNode, useMemo, useRef, useState } from 'react'
 import { clock, glyphFor, objectKind, ObjectCard } from '../components/objects'
 import { Horizon, LegPill, LegSheet, leaveAt, MODE_STYLE, RailGap, RailMark, railVars } from '../components/rail'
+import { PrintButton } from '../components/printout'
 import { Ribbons } from '../components/ribbons'
 import { Weather } from '../components/weather'
 import { cx, IssueList, Sheet, ViewHeader, Votes } from '../components/ui'
@@ -68,6 +69,7 @@ export default function PlanView() {
               <button aria-pressed={mode === 'list'} onClick={() => pick('list')} title="List" aria-label="List"><List /></button>
               <button aria-pressed={mode === 'day'} onClick={() => pick('day')} title="Day" aria-label="Day"><CalendarDays /></button>
             </span>
+            <PrintButton trip={trip} day={day} weather={weather} />
             <button className="fab" onClick={() => setAddAt(-1)} aria-label="Add to this day"><Plus /></button>
           </>
         }

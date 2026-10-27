@@ -59,7 +59,7 @@ export default function NowView() {
     <div>
       <ViewHeader
         title="Now"
-        sub={<>{dayLabel(now.day, 'long').split(',')[0]} · {clock(now.min)} {city} time{now.simulated && <b style={{ color: '#7c5cd6' }}> · pretend</b>}{inTrip && weather[now.day] && <> · <Weather w={weather[now.day]} /></>}</>}
+        sub={<>{dayLabel(now.day, 'long').split(',')[0]} · {clock(now.min)} {city} time{now.simulated && <b style={{ color: '#7c5cd6' }}> · pretend</b>}{inTrip && weather[now.day] && <> · <Weather w={weather[now.day]} compact /></>}</>}
         right={<button className="ib" onClick={() => setTab('map')} aria-label="Map"><MapIcon /></button>}
       >
         {inTrip && <Horizon trip={trip} day={now.day} now={now.min} />}
