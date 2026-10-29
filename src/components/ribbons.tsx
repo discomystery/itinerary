@@ -1,3 +1,4 @@
+import { Pencil } from 'lucide-react'
 import { useState } from 'react'
 import { cardKind, ribbonsFor } from '../lib/cards'
 import { useStore } from '../store'
@@ -15,7 +16,10 @@ export function Ribbons({ day }: { day: string }) {
     <div className="flex flex-col gap-1.5">
       {list.map(({ item, text, pips }) =>
         open === item.id ? (
-          <ObjectCard key={item.id} item={item} day={day} tz={trip.timezone} open onClick={() => setOpen(null)} onEdit={() => edit(item.id)} />
+          <ObjectCard
+            key={item.id} item={item} day={day} tz={trip.timezone} open onClick={() => setOpen(null)} onEdit={() => edit(item.id)}
+            strip={<><span /><button type="button" onClick={() => edit(item.id)}><Pencil />Edit</button></>}
+          />
         ) : (
           <button key={item.id} type="button" className={cx('rib', cardKind(item))} onClick={() => setOpen(item.id)}>
             {(() => {

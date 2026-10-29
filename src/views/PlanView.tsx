@@ -1,15 +1,17 @@
-import { ArrowRight, Banknote, CalendarDays, CalendarPlus, ChevronRight, Clock, Ellipsis, GripVertical, List, Lock, LockOpen, MapPin, Navigation, Pencil, Plus, StickyNote, Trash2, TriangleAlert, Undo2, Users } from 'lucide-react'
+import { Banknote, CalendarDays, CalendarPlus, ChevronRight, Clock, Ellipsis, GripVertical, List, Lock, MapPin, Navigation, Pencil, Plus, StickyNote, Trash2, TriangleAlert, Undo2, Users } from 'lucide-react'
 import { Fragment, type ReactNode, useMemo, useRef, useState } from 'react'
 import { clock, glyphFor, objectKind, ObjectCard } from '../components/objects'
 import { Horizon, LegPill, LegSheet, leaveAt, MODE_STYLE, RailGap, RailMark, railVars } from '../components/rail'
 import { PrintButton } from '../components/printout'
 import { Ribbons } from '../components/ribbons'
 import { Weather } from '../components/weather'
+import { WhenFields } from '../components/when'
+import { commitWhen, readWhen } from '../lib/when'
 import { Avatar, cx, IssueList, Sheet, ViewHeader, Votes } from '../components/ui'
 import { daylight, hoursSummary, openSpans, openStatus } from '../lib/hours'
 import { useFetchRoutes, useRoutes } from '../lib/routeCache'
 import { type DayAnalysis, type Leg, analyzeDay, anchorOnDay, anchoredSlot, findSlot, interestScore, makeCtx, worstSeverity } from '../lib/schedule'
-import { dayLabel, dayRange, fmtDuration, parseHHMM, snap, toHHMM } from '../lib/time'
+import { dayLabel, dayRange, snap } from '../lib/time'
 import { costOf, currencyOf, fmtMoney, tripCosts } from '../lib/costs'
 import { downloadCalendar } from '../lib/ics'
 import { directionsUrl } from '../lib/transit'
@@ -94,7 +96,6 @@ export default function PlanView() {
             unfolded={unfolded}
             selected={null}
             onToggle={(id) => setUnfolded(unfolded === id ? null : id)}
-            onEdit={setOpenBlock}
             onMore={setMore}
             onLeg={setOpenLeg}
             onAdd={() => setAddAt(-1)}
@@ -141,14 +142,13 @@ function DayStrip({ days, day, setDay, analyses }: {
 
 type Row = { key: string; t: number; node: ReactNode; mode?: TransitMode; isLeg?: boolean }
 
-export function ListView({ trip, day, analysis, unfolded, selected, onToggle, onEdit, onMore, onLeg, onAdd }: {
+export function ListView({ trip, day, analysis, unfolded, selected, onToggle, onMore, onLeg, onAdd }: {
   trip: Trip
   day: string
   analysis: DayAnalysis
   unfolded: string | null
   selected: string | null
   onToggle: (id: string) => void
-  onEdit: (id: string) => void
   onMore: (id: string) => void
   onLeg: (l: Leg) => void
   onAdd: () => void
@@ -197,7 +197,7 @@ export function ListView({ trip, day, analysis, unfolded, selected, onToggle, on
             open && (
               <>
                 {dir ? <a href={dir} target="_blank" rel="noreferrer"><Navigation />Directions</a> : <span />}
-                <button type="button" onClick={() => onEdit(b.id)}><Pencil />Edit</button>
+                <button type="button" onClick={() => editItem(item.id)}><Pencil />Edit</button>
                 <button type="button" onClick={() => onMore(b.id)}><Ellipsis />More</button>
               </>
             )
@@ -431,6 +431,7 @@ export function AddSheet({ trip, day, at, onClose }: { trip: Trip; day: string; 
   const addBlock = useStore((s) => s.addBlock)
   const edit = useStore((s) => s.edit)
   const addItem = useStore((s) => s.addItem)
+  const select = useStore((s) => s.select)
   const [q, setQ] = useState('')
   const scheduledToday = new Set(trip.blocks.filter((b) => b.day === day).map((b) => b.itemId))
 
@@ -491,7 +492,10 @@ export function AddSheet({ trip, day, at, onClose }: { trip: Trip; day: string; 
         className="btn-soft mt-3 w-full"
         onClick={() => {
           const id = addItem({ title: q || 'New idea' })
-          if (at != null) addBlock({ itemId: id, day, start: at, end: at + 60, locked: false })
+          // It was added to this day, so it goes on this day.
+          const fresh = useStore.getState().trip
+          const slot = at != null ? { start: at, end: at + 60 } : findSlot(fresh, day, itemById(fresh, id)!) ?? { start: 12 * 60, end: 13 * 60 }
+          select(addBlock({ itemId: id, day, start: slot.start, end: slot.end, locked: false }))
           onClose()
           edit(id)
         }}
@@ -529,12 +533,11 @@ function BlockSheet({ id, analysis, onClose, onLeg }: { id: string; analysis: Da
 /** `card={false}` leaves the card out, for a pane that shows it on its own stage. */
 export function BlockDetail({ id, analysis, onLeg, onEdit, card = true }: { id: string; analysis: DayAnalysis; onLeg: (l: Leg) => void; onEdit?: () => void; card?: boolean }) {
   const trip = useStore((s) => s.trip)
-  const { updateBlock, edit } = useStore()
+  const { mutate, edit } = useStore()
   const b = trip.blocks.find((x) => x.id === id)
   const item = b && itemById(trip, b.itemId)
   if (!b || !item) return null
   const days = dayRange(trip.startDay, trip.endDay)
-  const shift = (m: number) => updateBlock(b.id, { start: b.start + m, end: b.end + m })
   const leg = analysis.legs.find((l) => l.toId === b.id)
   const from = leg && itemById(trip, trip.blocks.find((x) => x.id === leg.fromId)?.itemId ?? '')
   const hours = hoursSummary(item.hours, b.day, clock)
@@ -545,50 +548,10 @@ export function BlockDetail({ id, analysis, onLeg, onEdit, card = true }: { id: 
       <div className="sheetdesk">
         {card && <ObjectCard item={item} block={b} tz={trip.timezone} open onEdit={() => { onEdit?.(); edit(item.id) }} />}
         <IssueList issues={analysis.issues.get(b.id)} />
-        <div className="pn">
-          <div className="sl" style={{ margin: '0 0 8px' }}><span>When</span><span>{fmtDuration(b.end - b.start)} · usually {fmtDuration(item.duration.typical)}</span></div>
-          <div className="when">
-            <label>
-              <small>Day</small>
-              <b>{dayLabel(b.day).split(',')[0]} {Number(b.day.slice(8))}</b>
-              <select value={b.day} onChange={(e) => updateBlock(b.id, { day: e.target.value })} aria-label="Day">
-                {days.map((d) => <option key={d} value={d}>{dayLabel(d)}</option>)}
-              </select>
-            </label>
-            <label>
-              <small>Start</small>
-              <b>{clock(b.start)}</b>
-              <input type="time" value={toHHMM(b.start)} aria-label="Start" onChange={(e) => {
-                const s = parseHHMM(e.target.value)
-                if (s != null) updateBlock(b.id, { start: s, end: s + (b.end - b.start) })
-              }} />
-            </label>
-            <span className="ar"><ArrowRight /></span>
-            <label>
-              <small>End</small>
-              <b>{clock(b.end)}</b>
-              <input type="time" value={toHHMM(b.end)} aria-label="End" onChange={(e) => {
-                let s = parseHHMM(e.target.value)
-                if (s == null) return
-                if (s <= b.start) s += 1440
-                updateBlock(b.id, { end: s })
-              }} />
-            </label>
-          </div>
-          <div className="nudge">
-            <span className="stp2"><button onClick={() => shift(-15)}>−15</button><button onClick={() => shift(15)}>+15</button></span>
-            <span className="stp2"><button onClick={() => shift(-60)}>−1h</button><button onClick={() => shift(60)}>+1h</button></span>
-            <button
-              className="lockb"
-              aria-pressed={b.locked}
-              onClick={() => updateBlock(b.id, { locked: !b.locked })}
-              title={b.locked ? 'Fixed time: running late never moves it. Tap to unlock' : 'Can move when you run late. Tap to fix this time'}
-              aria-label={b.locked ? 'Fixed time. Unlock' : 'Lock this time'}
-            >
-              {b.locked ? <Lock /> : <LockOpen />}
-            </button>
-          </div>
-        </div>
+        <WhenFields
+          item={item} w={readWhen(item, b, trip.timezone, b.day)} tz={trip.timezone} days={days} scheduled
+          onChange={(w) => mutate((t) => commitWhen(t, item.id, w, { blockId: b.id }))}
+        />
         <WhoGoing block={b} />
         {leg && M && (
           <div className="pn">

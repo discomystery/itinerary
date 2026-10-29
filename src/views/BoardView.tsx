@@ -3,6 +3,7 @@ import { type CSSProperties, type DragEvent, Fragment, useEffect, useMemo, useRe
 import { clock, glyphFor, objectKind, ObjectCard } from '../components/objects'
 import { LegSheet, MODE_STYLE, railVars } from '../components/rail'
 import { Ribbons } from '../components/ribbons'
+import { spanOf } from '../lib/cards'
 import { cx, ViewHeader } from '../components/ui'
 import { daylight } from '../lib/hours'
 import { useFetchRoutes, useRoutes } from '../lib/routeCache'
@@ -183,7 +184,6 @@ function Board({ trip, days, analyses, onPick, onAdd, onLeg, onPlace }: PaneProp
                 unfolded={null}
                 selected={selected ?? ''}
                 onToggle={(id) => onPick(id, d)}
-                onEdit={(id) => onPick(id, d)}
                 onMore={(id) => onPick(id, d)}
                 onLeg={onLeg}
                 onAdd={() => onAdd(d)}
@@ -199,7 +199,8 @@ function Board({ trip, days, analyses, onPick, onAdd, onLeg, onPlace }: PaneProp
 function IdeasColumn({ trip, onPick }: { trip: Trip; onPick: (id: string) => void }) {
   const selected = useStore((s) => s.selected)
   const { edit, addItem } = useStore()
-  const planned = new Set(trip.blocks.map((b) => b.itemId))
+  // Things running over several days are already on the board, as a ribbon on each day.
+  const planned = new Set([...trip.blocks.map((b) => b.itemId), ...trip.items.filter((i) => spanOf(i, trip.timezone)).map((i) => i.id)])
   const list = ideas(trip)
     .filter((i) => !planned.has(i.id))
     .sort((a, b) => interestScore(b) - interestScore(a) || a.createdAt - b.createdAt)

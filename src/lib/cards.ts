@@ -1,6 +1,6 @@
 import type { Anchor, CardKind, Item, ItemType, Trip } from '../types'
 import { anchorInTrip } from './schedule'
-import { dayRange } from './time'
+import { addDays, dayRange } from './time'
 
 // Which paper object each item is drawn as, the styles within each kind, and
 // the fields each one carries. Rendering lives in components/objects.tsx.
@@ -130,16 +130,28 @@ export const det = (i: Item, id: string) => i.details?.[id]?.trim() || undefined
 export interface Span {
   from: { day: string; min: number; anchor: Anchor }
   to: { day: string; min: number; anchor: Anchor }
+  /** Whole days: the times don't matter. */
+  allDay?: boolean
 }
 
-/** Stays, rentals and passes run from their first time to their last. */
+/**
+ * Does start → end run over several days? Stays and rentals do from one night;
+ * anything else needs to go past 6am the next day, so a late night out stays one plan.
+ */
+export function spansDays(i: Item, fromDay: string, toDay: string, toMin: number) {
+  if (toDay <= fromDay) return false
+  return !!KINDS[cardKind(i)].spans || toDay > addDays(fromDay, 1) || toMin > 6 * 60
+}
+
+/** Stays, rentals, passes, and anything set to run over several days, from their first time to their last. */
 export function spanOf(i: Item, tz: string): Span | null {
   const k = cardKind(i)
-  if (!KINDS[k].spans || (k === 'fare' && variantOf(i) !== 'day') || i.anchors.length < 2) return null
+  if (k === 'pass' || (k === 'fare' && variantOf(i) !== 'day') || !i.anchors.length) return null
   const pts = i.anchors.map((a) => ({ ...anchorInTrip(a, tz), anchor: a })).sort((a, b) => a.day.localeCompare(b.day) || a.min - b.min)
   const from = pts[0]
   const to = pts[pts.length - 1]
-  if (from.day >= to.day) return null
+  if (i.allDay) return { from, to, allDay: true }
+  if (!spansDays(i, from.day, to.day, to.min)) return null
   return { from, to }
 }
 
@@ -166,7 +178,9 @@ export function ribbonsFor(trip: Trip, day: string, clock: (m: number) => string
     const first = n === 0
     const last = day === s.to.day
     const at = (x: Span['from']) => `${x.anchor.label} ${clock(x.min)}`
-    if (k === 'key' || k === 'tag') {
+    if (s.allDay) {
+      out.push({ item: i, text: days.length > 1 ? `Day ${n + 1} of ${days.length}` : 'All day' })
+    } else if (k === 'key' || k === 'tag') {
       const nights = days.length - 1
       const text = first ? at(s.from) : last ? at(s.to) : `Night ${n + 1} of ${nights}`
       out.push({ item: i, text, pips: { on: Math.min(n + 1, nights), total: nights } })

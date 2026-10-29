@@ -7,24 +7,32 @@ import { addDays, dayLabel, dayRange, fmtDuration, fmtTime, parseHHMM, toHHMM } 
 import { airport, applyLegs, flightIssues, flightSpan, isLegAnchor, layovers, legFromCard, PER_LEG_FIELDS } from '../lib/flights'
 import { uid, useStore } from '../store'
 import type { Anchor, CardKind, FlightLeg, Item, LatLng } from '../types'
-import { Clock, ExternalLink, Lock, Map as MapIcon, MapPin, Plus, Sun, X } from 'lucide-react'
+import { ChevronDown, Clock, ExternalLink, Lock, Map as MapIcon, MapPin, Plus, Sun, X } from 'lucide-react'
 import { cardKind, det, fieldsFor, KIND_ORDER, KINDS, variantOf } from '../lib/cards'
 import { currencyOf } from '../lib/costs'
+import { commitWhen, readWhen, writeWhen } from '../lib/when'
 import { glyphFor, ObjectCard } from './objects'
+import { WhenFields } from './when'
 import { Avatar, cx, Field, InterestPicker, Sheet } from './ui'
 
 const TZ_CHOICES = ['America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles', 'Europe/London', 'UTC']
 
 export default function ItemEditor({ id, onClose }: { id: string; onClose: () => void }) {
   const trip = useStore((s) => s.trip)
-  const { updateItem, updateBlock, deleteItem } = useStore()
+  const selected = useStore((s) => s.selected)
+  const today = useStore((s) => s.day)
+  const { mutate, deleteItem } = useStore()
   const original = trip.items.find((i) => i.id === id)
+  const blocks = trip.blocks.filter((b) => b.itemId === id).sort((a, b) => a.day.localeCompare(b.day) || a.start - b.start)
+  // The plan in view (picked on the board), else its first one.
+  const block = blocks.find((b) => b.id === selected) ?? blocks[0]
   const [d, setD] = useState<Item | undefined>(original)
-  if (!original || !d) return null
+  const [w, setW] = useState(() => original && readWhen(original, block, trip.timezone, today))
+  const [addToPlan, setAddToPlan] = useState(true)
+  if (!original || !d || !w) return null
   const set = (p: Partial<Item>) => setD({ ...d, ...p })
   const days = dayRange(trip.startDay, trip.endDay)
   const herr = hoursError(d.hours)
-  const blocks = trip.blocks.filter((b) => b.itemId === id)
   const k = cardKind(d)
   const isFlightPass = k === 'pass' && variantOf(d) === 'flight'
   const hasLegs = isFlightPass && !!d.legs?.length
@@ -32,14 +40,19 @@ export default function ItemEditor({ id, onClose }: { id: string; onClose: () =>
   const save = () => {
     // Switching away from a flight drops its legs and the times they made.
     const next = d.legs?.length && !isFlightPass ? { ...d, ...applyLegs(d, [], trip.timezone) } : d
-    updateItem(id, next)
-    // A flight's slot follows its legs.
-    if (next.legs?.length) {
-      const span = flightSpan(next.legs, trip.timezone)
-      for (const b of blocks) updateBlock(b.id, span)
-    }
+    mutate((t) => {
+      const put = { ...t, items: t.items.map((i) => (i.id === id ? next : i)) }
+      // A flight's slot follows its legs; anything else follows When.
+      if (next.legs?.length) {
+        const span = flightSpan(next.legs, trip.timezone)
+        return { ...put, blocks: put.blocks.map((b) => (b.itemId === id ? { ...b, ...span } : b)) }
+      }
+      return commitWhen(put, id, w, { blockId: block?.id, addToPlan })
+    })
     onClose()
   }
+  // The card as it'll look with these times.
+  const preview = hasLegs ? d : { ...d, ...writeWhen(d, w, trip.timezone) }
 
   return (
     <Sheet
@@ -70,8 +83,10 @@ export default function ItemEditor({ id, onClose }: { id: string; onClose: () =>
         </Field>
 
         <div className="pointer-events-none" aria-hidden="true" inert>
-          <ObjectCard item={d} tz={trip.timezone} open />
+          <ObjectCard item={preview} tz={trip.timezone} open />
         </div>
+
+        <WhenFields item={d} w={w} tz={trip.timezone} days={days} scheduled={!!block} onChange={setW} addToPlan={addToPlan} onAddToPlan={setAddToPlan} />
 
         <CardPicker item={d} onChange={set} />
 
@@ -87,23 +102,12 @@ export default function ItemEditor({ id, onClose }: { id: string; onClose: () =>
 
         {k === 'cpass' && <CoversPicker item={d} items={trip.items} onChange={set} />}
 
-        <div>
-          <div className="label mb-1.5">Who's interested</div>
-          <ul className="space-y-1.5">
-            {trip.people.map((p) => (
-              <li key={p.id} className="flex items-center gap-2">
-                <Avatar person={p} />
-                <span className="flex-1 text-sm">{p.name}</span>
-                <InterestPicker size="sm" value={d.interest[p.id]} onChange={(v) => {
-                  const interest = { ...d.interest }
-                  if (v) interest[p.id] = v
-                  else delete interest[p.id]
-                  set({ interest })
-                }} />
-              </li>
-            ))}
-          </ul>
-        </div>
+        {hasLegs && (
+          <AnchorEditor
+            anchors={d.anchors.filter((a) => !isLegAnchor(a))} days={days} tripTz={trip.timezone} presets={['Boarding', 'Check-in closes']}
+            onChange={(anchors) => set({ anchors: [...anchors, ...d.anchors.filter(isLegAnchor)] })}
+          />
+        )}
 
         {d.type !== 'note' && <LocationPicker item={d} center={trip.center} onChange={set} label={WHERE[k]} />}
 
@@ -113,44 +117,13 @@ export default function ItemEditor({ id, onClose }: { id: string; onClose: () =>
           </Field>
         )}
 
-        {['post', 'map', 'ticket', 'resv'].includes(k) && <Field
-          label="Opening hours"
-          hint={
-            herr ? <span style={{ color: '#c8102e' }}>Can't read that: {herr}</span> : (
-              <>
-                OSM format, e.g. <code>Mo-Fr 10:00-18:00; Sa 11:00-16:00; Su off</code>
-                {d.hours && (
-                  <span className="mt-1 grid grid-cols-2 gap-x-3 font-mono t-sub">
-                    {days.map((day) => <span key={day}>{dayLabel(day).split(',')[0]} {day.slice(8)}: {hoursSummary(d.hours, day, fmtTime)}</span>)}
-                  </span>
-                )}
-              </>
-            )
-          }
-        >
-          <div className="flex gap-2">
-            <input className="input font-mono" value={d.hours ?? ''} placeholder="(unknown)" onChange={(e) => set({ hours: e.target.value || undefined, hoursSource: 'manual' })} />
-            {d.hoursSource && d.hours && (
-              <span className={cx('chip shrink-0 self-center', d.hoursSource === 'unverified' && '!bg-[var(--warn-bg)] !text-[var(--warn-fg)]')}>
-                {d.hoursSource === 'osm' ? 'from OSM' : d.hoursSource === 'manual' ? 'manual' : 'unverified'}
-              </span>
-            )}
-          </div>
-        </Field>}
-
-        {!hasLegs && <div>
-          <div className="label mb-1.5">How long</div>
-          <div className="grid grid-cols-3 gap-2">
-            {(['min', 'typical', 'max'] as const).map((k) => (
-              <label key={k} className="text-xs t-sub">
-                {k === 'typical' ? 'usually' : k} (min)
-                <input type="number" min={0} step={5} className="input mt-0.5" value={d.duration[k]} onChange={(e) => set({ duration: { ...d.duration, [k]: Number(e.target.value) } })} />
-              </label>
-            ))}
-          </div>
-        </div>}
-
-        <Field label={`Cost (${currencyOf(trip)})`} hint="Optional. Adds up on the Trip tab and under each day.">
+        <Field label={k === 'post' ? 'Note (written on the postcard)' : 'Notes'}>
+          <textarea className="input min-h-20" value={d.notes ?? ''} onChange={(e) => set({ notes: e.target.value || undefined })} />
+        </Field>
+        <Field label="Still needs…">
+          <input className="input" placeholder="e.g. book tickets" value={d.tbd ?? ''} onChange={(e) => set({ tbd: e.target.value || undefined })} />
+        </Field>
+        <Field label={`Cost (${currencyOf(trip)})`}>
           <div className="flex gap-2">
             <input
               className="input"
@@ -172,32 +145,65 @@ export default function ItemEditor({ id, onClose }: { id: string; onClose: () =>
           </div>
         </Field>
 
-        <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" checked={!!d.prefersDaylight} onChange={(e) => set({ prefersDaylight: e.target.checked })} />
-          <Sun size={15} className="t-sub" /> Best while it's light out
-        </label>
+        <div>
+          <div className="label mb-1.5">Who's interested</div>
+          <ul className="space-y-1.5">
+            {trip.people.map((p) => (
+              <li key={p.id} className="flex items-center gap-2">
+                <Avatar person={p} />
+                <span className="flex-1 text-sm">{p.name}</span>
+                <InterestPicker size="sm" value={d.interest[p.id]} onChange={(v) => {
+                  const interest = { ...d.interest }
+                  if (v) interest[p.id] = v
+                  else delete interest[p.id]
+                  set({ interest })
+                }} />
+              </li>
+            ))}
+          </ul>
+        </div>
 
-        {hasLegs ? (
-          <AnchorEditor
-            anchors={d.anchors.filter((a) => !isLegAnchor(a))} days={days} tripTz={trip.timezone} presets={['Boarding', 'Check-in closes']}
-            onChange={(anchors) => set({ anchors: [...anchors, ...d.anchors.filter(isLegAnchor)] })}
-          />
-        ) : (
-          <AnchorEditor anchors={d.anchors} days={days} tripTz={trip.timezone} presets={KINDS[k].times} onChange={(anchors) => set({ anchors })} />
-        )}
+        <details className="more">
+          <summary><ChevronDown size={15} /> More details</summary>
+          <div className="space-y-4 pt-3">
+            {['post', 'map', 'ticket', 'resv'].includes(k) && <Field
+              label="Opening hours"
+              hint={
+                herr ? <span style={{ color: '#c8102e' }}>Can't read that: {herr}</span> : (
+                  <>
+                    OSM format, e.g. <code>Mo-Fr 10:00-18:00; Sa 11:00-16:00; Su off</code>
+                    {d.hours && (
+                      <span className="mt-1 grid grid-cols-2 gap-x-3 font-mono t-sub">
+                        {days.map((day) => <span key={day}>{dayLabel(day).split(',')[0]} {day.slice(8)}: {hoursSummary(d.hours, day, fmtTime)}</span>)}
+                      </span>
+                    )}
+                  </>
+                )
+              }
+            >
+              <div className="flex gap-2">
+                <input className="input font-mono" value={d.hours ?? ''} placeholder="(unknown)" onChange={(e) => set({ hours: e.target.value || undefined, hoursSource: 'manual' })} />
+                {d.hoursSource && d.hours && (
+                  <span className={cx('chip shrink-0 self-center', d.hoursSource === 'unverified' && '!bg-[var(--warn-bg)] !text-[var(--warn-fg)]')}>
+                    {d.hoursSource === 'osm' ? 'from OSM' : d.hoursSource === 'manual' ? 'manual' : 'unverified'}
+                  </span>
+                )}
+              </div>
+            </Field>}
 
-        <Field label="Tags" hint="Comma separated">
-          <input className="input" value={d.tags.join(', ')} onChange={(e) => set({ tags: e.target.value.split(',').map((t) => t.trim().toLowerCase()).filter(Boolean) })} />
-        </Field>
-        <Field label={k === 'post' ? 'Note (written on the postcard)' : 'Notes'}>
-          <textarea className="input min-h-20" value={d.notes ?? ''} onChange={(e) => set({ notes: e.target.value || undefined })} />
-        </Field>
-        <Field label="Link">
-          <input className="input" type="url" value={d.url ?? ''} onChange={(e) => set({ url: e.target.value || undefined })} />
-        </Field>
-        <Field label="Still needs…" hint="Shown on the plan until someone clears it, e.g. “book tickets”">
-          <input className="input" value={d.tbd ?? ''} onChange={(e) => set({ tbd: e.target.value || undefined })} />
-        </Field>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={!!d.prefersDaylight} onChange={(e) => set({ prefersDaylight: e.target.checked })} />
+              <Sun size={15} className="t-sub" /> Best while it's light out
+            </label>
+
+            <Field label="Tags">
+              <input className="input" placeholder="food, rainy day" value={d.tags.join(', ')} onChange={(e) => set({ tags: e.target.value.split(',').map((t) => t.trim().toLowerCase()).filter(Boolean) })} />
+            </Field>
+            <Field label="Link">
+              <input className="input" type="url" value={d.url ?? ''} onChange={(e) => set({ url: e.target.value || undefined })} />
+            </Field>
+          </div>
+        </details>
         {d.url && <a className="inline-flex items-center gap-1 text-sm font-medium" style={{ color: 'var(--act)' }} href={d.url} target="_blank" rel="noreferrer">Open link <ExternalLink size={14} /></a>}
       </div>
     </Sheet>
@@ -210,9 +216,6 @@ function AnchorEditor({ anchors, days, tripTz, presets, onChange }: { anchors: A
   return (
     <div>
       <div className="label mb-1.5">Set times</div>
-      <p className="mb-2 text-xs t-sub">
-        Moments that matter, like <i>Doors 6:30 (soft)</i> or <i>Puck drop 7:00 (hard)</i>. Hard ones get flagged when you'd miss them. Stays, rentals and passes run from their first time to their last.
-      </p>
       <ul className="space-y-2">
         {anchors.map((a) => (
           <li key={a.id} className="panel space-y-1.5 p-2">
@@ -330,7 +333,6 @@ function LocationPicker({ item, center, onChange, label }: { item: Item; center:
             {item.location && item.type === 'area' && <Circle center={[pos.lat, pos.lng]} radius={item.areaRadius ?? 400} pathOptions={{ dashArray: '6 6' }} />}
             {item.location && <CircleMarker center={[pos.lat, pos.lng]} radius={7} pathOptions={{ color: 'white', fillColor: '#0f172a', fillOpacity: 1 }} />}
           </MapContainer>
-          <p className="chrome px-2 py-1 text-xs t-sub">Tap the map to set the spot</p>
         </div>
       )}
     </div>
@@ -356,23 +358,19 @@ function CardPicker({ item, onChange }: { item: Item; onChange: (p: Partial<Item
   return (
     <div>
       <div className="label mb-1.5">Card</div>
-      <div className="flex flex-wrap gap-1">
-        {KIND_ORDER.map((kind) => {
-          const G = glyphFor({ ...item, card: kind, variant: undefined })
-          const on = k === kind
-          return (
-            <button
-              key={kind}
-              onClick={() => onChange({ card: kind, type: KINDS[kind].type, variant: undefined })}
-              aria-pressed={on}
-              className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium"
-              style={on ? { background: 'var(--ink)', color: 'var(--chrome)' } : { boxShadow: 'inset 0 0 0 1px var(--line)' }}
-            >
-              <G size={13} /> {KINDS[kind].label}
-            </button>
-          )
-        })}
-      </div>
+      {(() => {
+        const G = glyphFor(item)
+        return (
+          <label className="wf kindpick">
+            <G size={16} />
+            <b>{KINDS[k].label}</b>
+            <ChevronDown size={15} className="t-sub" />
+            <select value={k} onChange={(e) => { const kind = e.target.value as CardKind; onChange({ card: kind, type: KINDS[kind].type, variant: undefined }) }} aria-label="Card">
+              {KIND_ORDER.map((kind) => <option key={kind} value={kind}>{KINDS[kind].label}</option>)}
+            </select>
+          </label>
+        )
+      })()}
       {variants && (
         <div className="seg mt-2" style={{ gridTemplateColumns: `repeat(${variants.length}, 1fr)` }}>
           {variants.map((x) => (
@@ -430,7 +428,6 @@ function LegEditor({ item, day, tripTz, onChange }: { item: Item; day: string; t
   return (
     <div>
       <div className="label mb-1.5">Connections</div>
-      {!legs.length && <p className="mb-2 text-xs t-sub">Changing planes? Add a connection and the details above become the first flight.</p>}
       <ul className="space-y-2">
         {legs.map((l, i) => (
           <li key={l.id} className="space-y-2">

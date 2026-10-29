@@ -5,6 +5,7 @@ import { clock, defaultEyebrow, glyphFor, objectKind } from '../components/objec
 import { cx, INTEREST_META, Sheet, ViewHeader, Votes } from '../components/ui'
 import { VoteTray, VotesSheet } from '../components/votes'
 import { hoursSummary } from '../lib/hours'
+import { spanOf } from '../lib/cards'
 import { anchoredSlot, findSlot, interestScore } from '../lib/schedule'
 import { dayLabel, dayRange, fmtDuration } from '../lib/time'
 import { ideas, inboxItems, useStore } from '../store'
@@ -33,7 +34,8 @@ export default function IdeasView() {
   const [reviewing, setReviewing] = useState(false)
   const [votesFor, setVotesFor] = useState<Item | null>(null)
 
-  const scheduledIds = new Set(trip.blocks.map((b) => b.itemId))
+  // Things running over several days are on the plan already, as a ribbon on each day.
+  const scheduledIds = new Set([...trip.blocks.map((b) => b.itemId), ...trip.items.filter((i) => spanOf(i, trip.timezone)).map((i) => i.id)])
   const keep = (i: Item) => {
     const votes = trip.people.map((p) => i.interest[p.id])
     switch (filter) {
