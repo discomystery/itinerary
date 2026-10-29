@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import { cx, Mark } from './components/ui'
 import { DetailPane, picked, TopTabs, UndoButton, WhoAmI } from './components/hub'
 import ItemEditor from './components/ItemEditor'
+import { SampleNote } from './components/sample'
 import { type Tab, useStore } from './store'
 import { importFromHash } from './lib/share'
 import { useInboxLookups } from './lib/useInboxLookups'
@@ -70,6 +71,7 @@ export default function App() {
             <WhoAmI />
           </div>
         </header>
+        <SampleNote />
         <div className="panes">
           <main ref={main} className={cx('pane', tab === 'map' || tab === 'plan' ? 'overflow-hidden' : 'overflow-y-auto')}>
             {toast}
@@ -98,6 +100,7 @@ export default function App() {
         <WhoAmI />
       </header>
 
+      <SampleNote />
       {toast}
 
       <main ref={main} className={cx('min-h-0 flex-1', tab === 'map' ? 'overflow-hidden' : 'overflow-y-auto')}>

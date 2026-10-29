@@ -1,4 +1,4 @@
-import { BookUser, CalendarPlus, ClipboardCheck, Download, Link2, Pencil, Plus, Share, ShieldCheck, Stamp, Star, Upload, UserPlus, Wallet, X } from 'lucide-react'
+import { BookUser, CalendarPlus, ClipboardCheck, Download, Eraser, MapPinned, Link2, Pencil, Plus, Share, ShieldCheck, Stamp, Star, Upload, UserPlus, Wallet, X } from 'lucide-react'
 import { type ReactNode, useMemo, useRef, useState } from 'react'
 import { MODE_STYLE } from '../components/rail'
 import { Avatar, Field, Sheet, ViewHeader } from '../components/ui'
@@ -9,7 +9,7 @@ import { downloadTrip, parseTrip, shareLink } from '../lib/share'
 import { dayLabel, dayRange, wallToUtc } from '../lib/time'
 import { MAPS_APP_NAME, type MapsApp, MODES } from '../lib/transit'
 import { useNow } from '../lib/useNow'
-import { uid, useStore } from '../store'
+import { SAMPLE_ID, uid, useStore } from '../store'
 import type { DocKind, TravelDoc, Trip } from '../types'
 
 const DOC_META: Record<DocKind, { label: string; Icon: typeof BookUser; hint: string }> = {
@@ -32,7 +32,7 @@ export default function TripView() {
   const simNow = useStore((s) => s.simNow)
   const mapsApp = useStore((s) => s.mapsApp)
   const organizer = useStore((s) => s.organizer)
-  const { mutate, addPerson, updatePerson, removePerson, replaceTrip, setViewer, setOrganizer, setSimNow, setMapsApp } = useStore()
+  const { mutate, addPerson, updatePerson, removePerson, replaceTrip, startFresh, setViewer, setOrganizer, setSimNow, setMapsApp } = useStore()
   const now = useNow()
   const [newPerson, setNewPerson] = useState('')
   const [msg, setMsg] = useState<string | null>(null)
@@ -40,6 +40,7 @@ export default function TripView() {
   const [doc, setDoc] = useState<TravelDoc | null>(null)
   const file = useRef<HTMLInputElement>(null)
   const set = (p: Partial<Trip>) => mutate((t) => ({ ...t, ...p }))
+  const isSample = trip.id === SAMPLE_ID
   const musts = (id: string) => trip.items.filter((i) => i.interest[id] === 'must').length
 
   const share = async () => {
@@ -172,8 +173,19 @@ export default function TripView() {
           <span className={simNow != null ? 'tg on' : 'tg'} />
         </button>
 
-        <div className="sl"><span>Start over</span></div>
-        <button className="btn-soft self-start" onClick={() => confirm('Reset to the Helsinki sample trip? (Undo works.)') && replaceTrip(helsinkiTrip())}>Reset to Helsinki sample</button>
+        <div className="sl"><span>Start over</span><span>Travel documents stay</span></div>
+        <div className="pn np rows">
+          <button className="trow" onClick={() => (isSample || confirm(`Clear "${trip.name}" and start a blank trip? Everything on it goes, except travel documents. You can undo right after.`)) && startFresh()}>
+            <Eraser />
+            <span className="x">{isSample ? 'Clear the sample trip' : 'Start a blank trip'}<small>{isSample ? 'Remove the Helsinki plans and ideas, and start your own' : 'Remove every plan, idea and person but you'}</small></span>
+          </button>
+          {!isSample && (
+            <button className="trow" onClick={() => confirm('Swap this trip for the Helsinki sample? You can undo right after.') && replaceTrip(helsinkiTrip())}>
+              <MapPinned />
+              <span className="x">Load the sample trip<small>Helsinki, filled in, to see what the app can do</small></span>
+            </button>
+          )}
+        </div>
       </div>
 
       {editing && <TripSheet onClose={() => setEditing(false)} />}
