@@ -2,7 +2,7 @@ import { Lock, LockOpen, Minus, Plus, X } from 'lucide-react'
 import { KINDS, cardKind } from '../lib/cards'
 import { isFlight } from '../lib/flights'
 import { dayLabel, fmtDuration, parseHHMM, toHHMM } from '../lib/time'
-import { canSpan, isMultiDay, labelsFor, lengthOf, moveEnd, moveStart, norm, settle, type When } from '../lib/when'
+import { canSpan, isMultiDay, lengthOf, moveEnd, moveStart, norm, settle, type When } from '../lib/when'
 import { uid } from '../store'
 import type { Item } from '../types'
 import { clock } from './objects'
@@ -34,8 +34,6 @@ export function WhenFields({ item, w, tz, days, scheduled, onChange, addToPlan, 
   const rows = w.set || scheduled
   const len = lengthOf(w)
   const summary = !rows ? `about ${fmtDuration(w.takes)}` : w.allDay || multi ? dayCount(w) : fmtDuration(len)
-  const lb = labelsFor(item)
-  const caps = w.set ? [w.main?.label ?? lb.start, multi ? w.last?.label ?? lb.end : 'Ends'] : ['Starts', 'Ends']
   const shift = (m: number) => onChange(moveStart(w, norm(w.day, w.start + m).day, norm(w.day, w.start + m).min))
 
   return (
@@ -67,12 +65,12 @@ export function WhenFields({ item, w, tz, days, scheduled, onChange, addToPlan, 
         <>
           <div className="wrows">
             <Row
-              cap={caps[0]} days={days} day={w.day} time={w.allDay ? null : w.start} disabled={flight}
+              cap="Starts" days={days} day={w.day} time={w.allDay ? null : w.start} disabled={flight}
               onDay={(d) => onChange(moveStart(w, d, w.start))}
               onTime={(t) => onChange(moveStart(w, w.day, t))}
             />
             <Row
-              cap={caps[1]} days={days.filter((d) => d >= w.day)} day={w.endDay} time={w.allDay ? null : w.end} disabled={flight}
+              cap="Ends" days={days.filter((d) => d >= w.day)} day={w.endDay} time={w.allDay ? null : w.end} disabled={flight}
               onDay={(d) => onChange(moveEnd(w, d, w.end))}
               onTime={(t) => onChange(moveEnd(w, w.endDay, t))}
             />
