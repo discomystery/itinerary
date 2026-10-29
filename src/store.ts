@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { blankTrip } from './data/blank'
 import { helsinkiTrip } from './data/helsinki'
 import { defaultMapsApp, type MapsApp } from './lib/transit'
 import type { Block, Id, Interest, Item, Person, Trip } from './types'
@@ -26,6 +27,10 @@ interface State {
   selected: Id | null
   /** This device's maps app for directions and "open in maps" links. */
   mapsApp: MapsApp
+  /** Closed the "this is a sample trip" note. */
+  sampleDismissed: boolean
+  /** Just started fresh: offer undo. Not saved. */
+  cleared: boolean
 
   setTab: (t: Tab) => void
   setDay: (d: string) => void
@@ -60,7 +65,13 @@ interface State {
   removePerson: (id: Id) => void
 
   replaceTrip: (t: Trip) => void
+  /** Clear everything for an empty trip of your own (one undo step). Travel documents stay. */
+  startFresh: () => void
+  dismissSample: () => void
+  setCleared: (on: boolean) => void
 }
+
+export const SAMPLE_ID = 't-helsinki'
 
 const PALETTE = ['#e11d48', '#0284c7', '#16a34a', '#d97706', '#7c3aed', '#db2777', '#0d9488', '#4f46e5']
 
@@ -68,7 +79,7 @@ export const useStore = create<State>()(
   persist(
     (set, get) => {
       const mutate = (fn: (t: Trip) => Trip) =>
-        set((s) => ({ trip: fn(s.trip), history: [...s.history.slice(-29), s.trip] }))
+        set((s) => ({ trip: fn(s.trip), history: [...s.history.slice(-29), s.trip], cleared: false }))
       const seed = helsinkiTrip()
       return {
         trip: seed,
@@ -81,6 +92,8 @@ export const useStore = create<State>()(
         editing: null,
         selected: null,
         mapsApp: defaultMapsApp(),
+        sampleDismissed: false,
+        cleared: false,
 
         setTab: (tab) => set({ tab }),
         setDay: (day) => set({ day }),
@@ -93,7 +106,13 @@ export const useStore = create<State>()(
 
         mutate,
         undo: () =>
-          set((s) => (s.history.length ? { trip: s.history[s.history.length - 1], history: s.history.slice(0, -1) } : s)),
+          set((s) => {
+            if (!s.history.length) return s
+            const trip = s.history[s.history.length - 1]
+            // Undoing a whole-trip swap can leave the picked day outside the trip.
+            const day = s.day < trip.startDay || s.day > trip.endDay ? trip.startDay : s.day
+            return { trip, history: s.history.slice(0, -1), day, cleared: false }
+          }),
 
         addItem: (p) => {
           const id = uid('i')
@@ -180,6 +199,12 @@ export const useStore = create<State>()(
           mutate((cur) => ({ ...trip, docs: trip.docs ?? cur.docs }))
           set({ viewer: trip.people[0]?.id ?? '', organizer: false, day: trip.startDay })
         },
+        startFresh: () => {
+          get().replaceTrip(blankTrip(get().trip, get().viewer))
+          set({ selected: null, editing: null, simNow: null, cleared: true })
+        },
+        dismissSample: () => set({ sampleDismissed: true }),
+        setCleared: (cleared) => set({ cleared }),
       }
     },
     {
@@ -197,7 +222,7 @@ export const useStore = create<State>()(
         }
         return state as State
       },
-      partialize: (s) => ({ trip: s.trip, viewer: s.viewer, organizer: s.organizer, day: s.day, tab: s.tab, simNow: s.simNow, mapsApp: s.mapsApp }),
+      partialize: (s) => ({ trip: s.trip, viewer: s.viewer, organizer: s.organizer, day: s.day, tab: s.tab, simNow: s.simNow, mapsApp: s.mapsApp, sampleDismissed: s.sampleDismissed }),
     },
   ),
 )
