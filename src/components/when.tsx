@@ -76,14 +76,16 @@ export function WhenFields({ item, w, tz, days, scheduled, onChange, addToPlan, 
             />
           </div>
 
-          {!w.allDay && !flight && (
-            <div className="nudge">
-              <span className="stp2"><button onClick={() => shift(-15)}>−15</button><button onClick={() => shift(15)}>+15</button></span>
-              <span className="stp2"><button onClick={() => shift(-60)}>−1h</button><button onClick={() => shift(60)}>+1h</button></span>
-            </div>
-          )}
           {!flight && (
             <div className="nudge">
+              {!w.allDay && (
+                <span className="stp2">
+                  <button onClick={() => shift(-60)} aria-label="An hour earlier">−1h</button>
+                  <button onClick={() => shift(-15)} aria-label="15 minutes earlier">−15</button>
+                  <button onClick={() => shift(15)} aria-label="15 minutes later">+15</button>
+                  <button onClick={() => shift(60)} aria-label="An hour later">+1h</button>
+                </span>
+              )}
               {w.set && canSpan(item) && (
                 <label className="chipb">
                   <input type="checkbox" checked={w.allDay} onChange={(e) => onChange(e.target.checked ? { ...w, allDay: true } : untimed(w))} /> All day
@@ -91,12 +93,13 @@ export function WhenFields({ item, w, tz, days, scheduled, onChange, addToPlan, 
               )}
               {!w.allDay && (
                 <button
-                  className="fixb"
+                  className="lockb"
                   aria-pressed={w.fixed}
                   onClick={() => onChange({ ...w, fixed: !w.fixed })}
-                  title={w.fixed ? 'Fixed: running late never moves it. Tap to let it move' : 'Can move when you run late. Tap to fix this time'}
+                  title={w.fixed ? 'Fixed time: running late never moves it. Tap to let it move' : 'Can move when you run late. Tap to fix this time'}
+                  aria-label={w.fixed ? 'Fixed time. Let it move' : 'Can move. Fix this time'}
                 >
-                  {w.fixed ? <><Lock /> Fixed time</> : <><LockOpen /> Can move</>}
+                  {w.fixed ? <Lock /> : <LockOpen />}
                 </button>
               )}
             </div>
