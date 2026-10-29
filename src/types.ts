@@ -59,6 +59,8 @@ export interface Item {
   hours?: string
   hoursSource?: HoursSource
   anchors: Anchor[]
+  /** Whole days with no times: runs from its first anchor's day to its last's. */
+  allDay?: boolean
   duration: Duration
   /** Soft preference: this is best done while it's light out. */
   prefersDaylight?: boolean

@@ -860,3 +860,41 @@ button.o:active { transform: scale(0.99); }
 .hub .sample .x { flex: 0 1 auto; }
 .rows > .trow { padding: 12px; }
 .rows > .trow > svg { width: 18px; height: 18px; color: var(--act); flex: none; }
+
+/* ---------------------------- When control ---------------------------- */
+/* One control for when something happens, in the editor, the plan sheet and the details pane. */
+.whenpn .wh { font-size: 12px; line-height: 1.35; color: var(--sub); margin: 6px 0 0; }
+.whenpn .seg > button { padding-top: 7px; padding-bottom: 7px; }
+.wrows { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.wrow { display: grid; grid-template-columns: 74px 1.25fr 1fr; gap: 6px; align-items: center; }
+.wrow.noday { grid-template-columns: 74px 1fr; }
+.wrow > small { font: 600 9.5px/1.15 var(--mono); letter-spacing: 0.07em; text-transform: uppercase; color: var(--sub); overflow: hidden; text-overflow: ellipsis; }
+.wf { position: relative; background: var(--chrome); border: 1px solid var(--line); border-radius: 9px; padding: 8px 10px; min-width: 0; cursor: pointer; }
+.wf b { font: 700 15px/1.1 var(--mono); white-space: nowrap; display: block; overflow: hidden; text-overflow: ellipsis; }
+.wf input, .wf select { position: absolute; inset: 0; opacity: 0; width: 100%; cursor: pointer; }
+.wf:focus-within { outline: 2px solid var(--act); outline-offset: 1px; }
+.whenpn .nudge { flex-wrap: wrap; }
+.chipb { display: inline-flex; align-items: center; gap: 5px; padding: 6px 10px; border-radius: 9px; font: 600 12px/1 var(--mono); color: var(--ink); background: var(--chrome); box-shadow: inset 0 0 0 1px var(--line); border: 0; cursor: pointer; }
+.chipb[aria-pressed='true'] { background: var(--ink); color: var(--chrome); box-shadow: none; }
+.chipb input { accent-color: var(--ink); margin: 0; }
+.fixb { margin-left: auto; display: inline-flex; align-items: center; gap: 5px; padding: 7px 10px; border-radius: 9px; font: 600 12px/1 var(--sans); color: var(--sub); background: var(--chrome); box-shadow: inset 0 0 0 1px var(--line); border: 0; cursor: pointer; }
+.fixb svg { width: 14px; height: 14px; }
+.fixb[aria-pressed='true'] { background: var(--ink); color: var(--chrome); box-shadow: none; }
+.takes { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.takes > small { font: 600 9.5px/1 var(--mono); letter-spacing: 0.07em; text-transform: uppercase; color: var(--sub); width: 100%; }
+.takes .stp2 { align-items: center; }
+.takes .stp2 b { font: 700 14px/1 var(--mono); padding: 0 10px; min-width: 70px; text-align: center; }
+.takes .stp2 svg { width: 14px; height: 14px; }
+.takes .stp2 b + button { border-left: 1px solid var(--line); }
+.moments { margin-top: 12px; border-top: 1px dashed var(--line); padding-top: 8px; }
+.moments .sl { margin: 0 0 6px; }
+.mom { display: flex; align-items: center; gap: 5px; margin-top: 5px; }
+.mom .input { min-width: 0; }
+.mom .lockb { margin-left: 0; flex: none; width: 30px; height: 30px; }
+.addplan { display: flex; align-items: center; gap: 8px; margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--line); font-size: 13px; font-weight: 500; }
+.addplan input { accent-color: var(--ink); width: 16px; height: 16px; }
+details.more > summary { list-style: none; display: flex; align-items: center; gap: 6px; cursor: pointer; font: 600 11px/1 var(--mono); letter-spacing: 0.07em; text-transform: uppercase; color: var(--sub); padding: 6px 0; }
+details.more > summary::-webkit-details-marker { display: none; }
+details.more > summary svg { transition: transform 0.15s; transform: rotate(-90deg); }
+details.more[open] > summary svg { transform: none; }
+.mom input[type='time'] { width: 8.6rem; flex: none; }
