@@ -42,21 +42,12 @@ export function WhenFields({ item, w, tz, days, scheduled, onChange, addToPlan, 
     <div className="pn whenpn">
       <div className="sl" style={{ margin: '0 0 8px' }}><span>When</span><span>{summary}</span></div>
 
-      {flight ? (
-        <p className="wh">Set by the flights below. Change a leg's times and this follows.</p>
-      ) : (
+      {!flight && (
         <>
           <div className="seg" style={{ gridTemplateColumns: '1fr 1fr' }} role="group" aria-label="Kind of time">
             <button aria-pressed={!w.set} onClick={() => onChange({ ...w, set: false, allDay: false })}>Flexible</button>
             <button aria-pressed={w.set} onClick={() => onChange({ ...w, set: true })}>Set time</button>
           </div>
-          <p className="wh">
-            {w.set
-              ? 'It happens at a set time, like a show, a tour or a booking.'
-              : scheduled
-                ? 'It goes wherever it fits. This is just where it sits on the plan for now.'
-                : 'It goes wherever it fits. Add it to a day and it finds a free slot.'}
-          </p>
         </>
       )}
 
@@ -86,19 +77,7 @@ export function WhenFields({ item, w, tz, days, scheduled, onChange, addToPlan, 
               onTime={(t) => onChange(moveEnd(w, w.endDay, t))}
             />
           </div>
-          {!flight && (
-            <p className="wh">
-              {multi || (w.allDay && w.endDay > w.day)
-                ? `Runs over ${dayCount(w)}, and shows on each of them.`
-                : w.allDay
-                  ? 'Shows at the top of the day.'
-                  : w.endDay > w.day
-                    ? `Ends the next morning, at ${clock(w.end)}.`
-                    : w.set && canSpan(item)
-                      ? 'Running over several days? Pick a later end day.'
-                      : null}
-            </p>
-          )}
+
           {!w.allDay && !flight && (
             <div className="nudge">
               <span className="stp2"><button onClick={() => shift(-15)}>−15</button><button onClick={() => shift(15)}>+15</button></span>

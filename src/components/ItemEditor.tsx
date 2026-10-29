@@ -120,10 +120,10 @@ export default function ItemEditor({ id, onClose }: { id: string; onClose: () =>
         <Field label={k === 'post' ? 'Note (written on the postcard)' : 'Notes'}>
           <textarea className="input min-h-20" value={d.notes ?? ''} onChange={(e) => set({ notes: e.target.value || undefined })} />
         </Field>
-        <Field label="Still needs…" hint="Shown on the plan until someone clears it, e.g. “book tickets”">
-          <input className="input" value={d.tbd ?? ''} onChange={(e) => set({ tbd: e.target.value || undefined })} />
+        <Field label="Still needs…">
+          <input className="input" placeholder="e.g. book tickets" value={d.tbd ?? ''} onChange={(e) => set({ tbd: e.target.value || undefined })} />
         </Field>
-        <Field label={`Cost (${currencyOf(trip)})`} hint="Optional. Adds up on the Trip tab and under each day.">
+        <Field label={`Cost (${currencyOf(trip)})`}>
           <div className="flex gap-2">
             <input
               className="input"
@@ -196,8 +196,8 @@ export default function ItemEditor({ id, onClose }: { id: string; onClose: () =>
               <Sun size={15} className="t-sub" /> Best while it's light out
             </label>
 
-            <Field label="Tags" hint="Comma separated">
-              <input className="input" value={d.tags.join(', ')} onChange={(e) => set({ tags: e.target.value.split(',').map((t) => t.trim().toLowerCase()).filter(Boolean) })} />
+            <Field label="Tags">
+              <input className="input" placeholder="food, rainy day" value={d.tags.join(', ')} onChange={(e) => set({ tags: e.target.value.split(',').map((t) => t.trim().toLowerCase()).filter(Boolean) })} />
             </Field>
             <Field label="Link">
               <input className="input" type="url" value={d.url ?? ''} onChange={(e) => set({ url: e.target.value || undefined })} />
@@ -216,9 +216,6 @@ function AnchorEditor({ anchors, days, tripTz, presets, onChange }: { anchors: A
   return (
     <div>
       <div className="label mb-1.5">Set times</div>
-      <p className="mb-2 text-xs t-sub">
-        Moments that matter, like <i>Doors 6:30 (soft)</i> or <i>Puck drop 7:00 (hard)</i>. Hard ones get flagged when you'd miss them. Stays, rentals and passes run from their first time to their last.
-      </p>
       <ul className="space-y-2">
         {anchors.map((a) => (
           <li key={a.id} className="panel space-y-1.5 p-2">
@@ -336,7 +333,6 @@ function LocationPicker({ item, center, onChange, label }: { item: Item; center:
             {item.location && item.type === 'area' && <Circle center={[pos.lat, pos.lng]} radius={item.areaRadius ?? 400} pathOptions={{ dashArray: '6 6' }} />}
             {item.location && <CircleMarker center={[pos.lat, pos.lng]} radius={7} pathOptions={{ color: 'white', fillColor: '#0f172a', fillOpacity: 1 }} />}
           </MapContainer>
-          <p className="chrome px-2 py-1 text-xs t-sub">Tap the map to set the spot</p>
         </div>
       )}
     </div>
@@ -436,7 +432,6 @@ function LegEditor({ item, day, tripTz, onChange }: { item: Item; day: string; t
   return (
     <div>
       <div className="label mb-1.5">Connections</div>
-      {!legs.length && <p className="mb-2 text-xs t-sub">Changing planes? Add a connection and the details above become the first flight.</p>}
       <ul className="space-y-2">
         {legs.map((l, i) => (
           <li key={l.id} className="space-y-2">
