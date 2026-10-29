@@ -4,7 +4,7 @@ import type { Block, Trip } from '../types'
 import { daylight, openSpans, openStatus } from './hours'
 import { cascade, runningLate } from './reflow'
 import { analyzeDay, anchorInTrip, anchoredSlot, findSlot, makeCtx } from './schedule'
-import { nowIn, wallToUtc } from './time'
+import { isTimeZone, nowIn, timeZones, wallToUtc } from './time'
 import { defaultMapsApp, directionsUrl, placeUrl, travelMinutes } from './transit'
 
 const TZ = 'Europe/Helsinki'
@@ -14,6 +14,25 @@ describe('time', () => {
     const utc = wallToUtc(TZ, '2026-11-12', 19 * 60)
     expect(new Date(utc).toISOString()).toBe('2026-11-12T17:00:00.000Z')
     expect(nowIn('America/New_York', new Date(utc))).toEqual({ day: '2026-11-12', min: 12 * 60 })
+  })
+
+  it('survives a half-typed time zone instead of crashing', () => {
+    // Typing "Europe/Helsinki" into Trip details passes through these on the way.
+    for (const tz of ['', 'E', 'Europe/', 'Europe/Hel', 'not a zone']) {
+      expect(isTimeZone(tz)).toBe(false)
+      expect(() => nowIn(tz)).not.toThrow()
+      expect(() => wallToUtc(tz, '2026-11-12', 600)).not.toThrow()
+    }
+    expect(nowIn('Europe/Hel', new Date('2026-11-12T17:00:00Z'))).toEqual({ day: '2026-11-12', min: 17 * 60 })
+    expect(isTimeZone(TZ)).toBe(true)
+    expect(timeZones()).toContain(TZ)
+  })
+
+  it('still draws a day for a trip saved with a bad time zone', () => {
+    const t = { ...helsinkiTrip(), timezone: 'Europe/Hel' }
+    const day = t.blocks[0].day
+    expect(() => analyzeDay(t, day)).not.toThrow()
+    expect(() => daylight(day, t.center.lat, t.center.lng, t.timezone)).not.toThrow()
   })
 })
 

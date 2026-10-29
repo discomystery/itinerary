@@ -63,10 +63,43 @@ export function localDate(day: string, min: number): Date {
   return new Date(y, m - 1, d, 0, Math.round(min))
 }
 
-/** Current wall time in a timezone, as (day, minutes). */
+const zoneOk = new Map<string, boolean>()
+
+/** True for an IANA zone the browser knows, like "Europe/Helsinki". */
+export function isTimeZone(tz: string): boolean {
+  if (!tz) return false
+  let ok = zoneOk.get(tz)
+  if (ok === undefined) {
+    try {
+      new Intl.DateTimeFormat('en-US', { timeZone: tz })
+      ok = true
+    } catch {
+      ok = false
+    }
+    zoneOk.set(tz, ok)
+  }
+  return ok
+}
+
+/** This device's zone, or UTC if the browser won't say. */
+export function deviceTimeZone(): string {
+  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone
+  return tz && isTimeZone(tz) ? tz : 'UTC'
+}
+
+/** Time zones to offer in a picker. */
+export function timeZones(): string[] {
+  try {
+    return Intl.supportedValuesOf('timeZone')
+  } catch {
+    return []
+  }
+}
+
+/** Current wall time in a timezone, as (day, minutes). An unknown zone reads as UTC rather than throwing. */
 export function nowIn(timezone: string, at: Date = new Date()): { day: string; min: number } {
   const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: timezone,
+    timeZone: isTimeZone(timezone) ? timezone : 'UTC',
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',

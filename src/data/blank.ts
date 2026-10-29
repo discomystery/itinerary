@@ -1,4 +1,4 @@
-import { addDays } from '../lib/time'
+import { addDays, deviceTimeZone } from '../lib/time'
 import type { Trip } from '../types'
 
 /** An empty trip to start your own: you, three days from today, and nothing planned yet. */
@@ -11,7 +11,7 @@ export function blankTrip(from: Trip, meId?: string): Trip {
     name: 'My trip',
     startDay: today,
     endDay: addDays(today, 2),
-    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || from.timezone,
+    timezone: deviceTimeZone(),
     center: from.center,
     defaultMode: from.defaultMode,
     people: [me],
