@@ -1,12 +1,12 @@
 import { BookUser, CalendarPlus, ClipboardCheck, Download, Eraser, MapPinned, Link2, Pencil, Plus, Share, ShieldCheck, Stamp, Star, Upload, UserPlus, Wallet, X } from 'lucide-react'
-import { type ReactNode, useMemo, useRef, useState } from 'react'
+import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 import { MODE_STYLE } from '../components/rail'
 import { Avatar, Field, Sheet, ViewHeader } from '../components/ui'
 import { helsinkiTrip } from '../data/helsinki'
 import { CURRENCIES, currencyOf, fmtMoney, tripCosts } from '../lib/costs'
 import { downloadCalendar } from '../lib/ics'
 import { downloadTrip, parseTrip, shareLink } from '../lib/share'
-import { dayLabel, dayRange, wallToUtc } from '../lib/time'
+import { dayLabel, dayRange, isTimeZone, timeZones, wallToUtc } from '../lib/time'
 import { MAPS_APP_NAME, type MapsApp, MODES } from '../lib/transit'
 import { useNow } from '../lib/useNow'
 import { SAMPLE_ID, uid, useStore } from '../store'
@@ -291,6 +291,35 @@ function DocSheet({ doc, onClose, onSave, onDelete }: { doc: TravelDoc; onClose:
   )
 }
 
+/** Typing passes through half-names like "Europe/Hel", so only a zone the browser knows is saved. */
+function TimeZoneField({ value, onChange }: { value: string; onChange: (tz: string) => void }) {
+  const [draft, setDraft] = useState(value)
+  const zones = useMemo(() => [...new Set(['UTC', ...timeZones()])], [])
+  useEffect(() => setDraft(value), [value])
+  const ok = isTimeZone(draft.trim())
+  return (
+    <Field label="Trip timezone" hint={ok ? 'All schedule times are local to the trip.' : `Pick a time zone from the list, like Europe/Helsinki. Still using ${value}.`}>
+      <input
+        className="input"
+        list="tz-list"
+        value={draft}
+        autoComplete="off"
+        spellCheck={false}
+        aria-invalid={!ok}
+        onChange={(e) => {
+          setDraft(e.target.value)
+          const tz = e.target.value.trim()
+          if (isTimeZone(tz) && tz !== value) onChange(tz)
+        }}
+        onBlur={() => !ok && setDraft(value)}
+      />
+      <datalist id="tz-list">
+        {zones.map((z) => <option key={z} value={z} />)}
+      </datalist>
+    </Field>
+  )
+}
+
 function TripSheet({ onClose }: { onClose: () => void }) {
   const trip = useStore((s) => s.trip)
   const mutate = useStore((s) => s.mutate)
@@ -309,9 +338,7 @@ function TripSheet({ onClose }: { onClose: () => void }) {
             <input type="date" className="input" value={trip.endDay} onChange={(e) => e.target.value && set({ endDay: e.target.value })} />
           </Field>
         </div>
-        <Field label="Trip timezone" hint="All schedule times are local to the trip.">
-          <input className="input" value={trip.timezone} onChange={(e) => set({ timezone: e.target.value })} />
-        </Field>
+        <TimeZoneField value={trip.timezone} onChange={(timezone) => set({ timezone })} />
       </div>
     </Sheet>
   )

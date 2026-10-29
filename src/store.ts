@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { blankTrip } from './data/blank'
 import { helsinkiTrip } from './data/helsinki'
+import { deviceTimeZone, isTimeZone } from './lib/time'
 import { defaultMapsApp, type MapsApp } from './lib/transit'
 import type { Block, Id, Interest, Item, Person, Trip } from './types'
 
@@ -209,9 +210,11 @@ export const useStore = create<State>()(
     },
     {
       name: 'itinerary-v1',
-      version: 3,
+      version: 4,
       migrate: (state, version) => {
         const s = state as { trip?: Trip }
+        // v4: a half-typed time zone could get saved and crash every screen on load.
+        if (version < 4 && s.trip && !isTimeZone(s.trip.timezone)) s.trip.timezone = s.trip.id === SAMPLE_ID ? helsinkiTrip().timezone : deviceTimeZone()
         // v3: prices. The Helsinki sample is in euros.
         if (version < 3 && s.trip?.id === 't-helsinki' && !s.trip.currency) s.trip.currency = 'EUR'
         // v2: stays run check in → check out so they show on the days between.

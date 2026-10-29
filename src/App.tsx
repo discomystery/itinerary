@@ -2,6 +2,7 @@ import { CalendarDays, Lightbulb, type LucideIcon, Map as MapIcon, Timer, Undo2,
 import { useEffect, useRef, useState } from 'react'
 import { cx, Mark } from './components/ui'
 import { DetailPane, picked, TopTabs, UndoButton, WhoAmI } from './components/hub'
+import ErrorBoundary from './components/ErrorBoundary'
 import ItemEditor from './components/ItemEditor'
 import { SampleNote } from './components/sample'
 import { type Tab, useStore } from './store'
@@ -75,15 +76,17 @@ export default function App() {
         <div className="panes">
           <main ref={main} className={cx('pane', tab === 'map' || tab === 'plan' ? 'overflow-hidden' : 'overflow-y-auto')}>
             {toast}
-            {tab === 'now' && <NowView />}
-            {tab === 'plan' && <BoardView />}
-            {tab === 'map' && <MapView />}
-            {tab === 'ideas' && <IdeasView />}
-            {tab === 'trip' && <TripView />}
+            <ErrorBoundary resetKey={tab}>
+              {tab === 'now' && <NowView />}
+              {tab === 'plan' && <BoardView />}
+              {tab === 'map' && <MapView />}
+              {tab === 'ideas' && <IdeasView />}
+              {tab === 'trip' && <TripView />}
+            </ErrorBoundary>
           </main>
-          {aside}
+          <ErrorBoundary resetKey={`${tab}:${selected}`}>{aside}</ErrorBoundary>
         </div>
-        {editing && <ItemEditor id={editing} onClose={() => edit(null)} />}
+        {editing && <ErrorBoundary resetKey={editing}><ItemEditor id={editing} onClose={() => edit(null)} /></ErrorBoundary>}
       </div>
     )
   }
@@ -104,11 +107,13 @@ export default function App() {
       {toast}
 
       <main ref={main} className={cx('min-h-0 flex-1', tab === 'map' ? 'overflow-hidden' : 'overflow-y-auto')}>
-        {tab === 'now' && <NowView />}
-        {tab === 'plan' && <PlanView />}
-        {tab === 'map' && <MapView />}
-        {tab === 'ideas' && <IdeasView />}
-        {tab === 'trip' && <TripView />}
+        <ErrorBoundary resetKey={tab}>
+          {tab === 'now' && <NowView />}
+          {tab === 'plan' && <PlanView />}
+          {tab === 'map' && <MapView />}
+          {tab === 'ideas' && <IdeasView />}
+          {tab === 'trip' && <TripView />}
+        </ErrorBoundary>
       </main>
 
       <nav className="chrome grid grid-cols-5 border-t b-line pb-[env(safe-area-inset-bottom)]">
@@ -126,7 +131,7 @@ export default function App() {
         ))}
       </nav>
 
-      {editing && <ItemEditor id={editing} onClose={() => edit(null)} />}
+      {editing && <ErrorBoundary resetKey={editing}><ItemEditor id={editing} onClose={() => edit(null)} /></ErrorBoundary>}
     </div>
   )
 }
