@@ -358,23 +358,19 @@ function CardPicker({ item, onChange }: { item: Item; onChange: (p: Partial<Item
   return (
     <div>
       <div className="label mb-1.5">Card</div>
-      <div className="flex flex-wrap gap-1">
-        {KIND_ORDER.map((kind) => {
-          const G = glyphFor({ ...item, card: kind, variant: undefined })
-          const on = k === kind
-          return (
-            <button
-              key={kind}
-              onClick={() => onChange({ card: kind, type: KINDS[kind].type, variant: undefined })}
-              aria-pressed={on}
-              className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium"
-              style={on ? { background: 'var(--ink)', color: 'var(--chrome)' } : { boxShadow: 'inset 0 0 0 1px var(--line)' }}
-            >
-              <G size={13} /> {KINDS[kind].label}
-            </button>
-          )
-        })}
-      </div>
+      {(() => {
+        const G = glyphFor(item)
+        return (
+          <label className="wf kindpick">
+            <G size={16} />
+            <b>{KINDS[k].label}</b>
+            <ChevronDown size={15} className="t-sub" />
+            <select value={k} onChange={(e) => { const kind = e.target.value as CardKind; onChange({ card: kind, type: KINDS[kind].type, variant: undefined }) }} aria-label="Card">
+              {KIND_ORDER.map((kind) => <option key={kind} value={kind}>{KINDS[kind].label}</option>)}
+            </select>
+          </label>
+        )
+      })()}
       {variants && (
         <div className="seg mt-2" style={{ gridTemplateColumns: `repeat(${variants.length}, 1fr)` }}>
           {variants.map((x) => (

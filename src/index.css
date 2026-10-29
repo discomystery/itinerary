@@ -899,3 +899,5 @@ details.more > summary::-webkit-details-marker { display: none; }
 details.more > summary svg { transition: transform 0.15s; transform: rotate(-90deg); }
 details.more[open] > summary svg { transform: none; }
 .mom input[type='time'] { width: 8.6rem; flex: none; }
+.kindpick { display: flex; align-items: center; gap: 8px; }
+.kindpick b { flex: 1; font: 600 14px/1.2 var(--sans); }
