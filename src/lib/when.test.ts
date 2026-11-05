@@ -3,7 +3,7 @@ import { helsinkiTrip } from '../data/helsinki'
 import type { Item } from '../types'
 import { ribbonsFor, spanOf } from './cards'
 import { anchoredSlot } from './schedule'
-import { commitWhen, moveEnd, moveStart, readWhen, settle, writeWhen } from './when'
+import { commitWhen, earlyMoments, moveEnd, moveStart, readWhen, shiftAll, writeWhen } from './when'
 
 const TZ = 'Europe/Helsinki'
 const clock = (m: number) => `${Math.floor(m / 60)}:${String(m % 60).padStart(2, '0')}`
@@ -11,11 +11,12 @@ const item = (trip: ReturnType<typeof helsinkiTrip>, id: string) => trip.items.f
 const blocksOf = (trip: ReturnType<typeof helsinkiTrip>, id: string) => trip.blocks.filter((b) => b.itemId === id)
 
 describe('reading when', () => {
-  it('reads a set-time event as its plan: first time to the end, with the rest as moments', () => {
+  it('reads a set-time event from its real start, with doors as another time', () => {
     const trip = helsinkiTrip()
     const w = readWhen(item(trip, 'i-game1'), undefined, TZ, trip.startDay)
-    expect(w).toMatchObject({ set: true, allDay: false, day: '2026-11-12', start: 17 * 60 + 30, endDay: '2026-11-12', end: 22 * 60, fixed: true })
-    expect(w.moments.map((a) => a.label)).toEqual(['Puck drop'])
+    expect(w).toMatchObject({ set: true, allDay: false, day: '2026-11-12', start: 19 * 60, endDay: '2026-11-12', end: 22 * 60, fixed: true })
+    expect(w.main?.label).toBe('Puck drop')
+    expect(w.moments.map((a) => a.label)).toEqual(['Doors (est.)'])
   })
 
   it('reads a stay as check in → check out', () => {
@@ -34,15 +35,38 @@ describe('reading when', () => {
 })
 
 describe('changing when', () => {
-  it('moves a set time, its moments and its slot on the plan together', () => {
+  it('moves the whole thing, doors and all, to another day', () => {
     const trip = helsinkiTrip()
     const game = item(trip, 'i-game1')
-    const w = moveStart(readWhen(game, undefined, TZ, trip.startDay), '2026-11-13', 18 * 60 + 30)
+    const w = moveStart(readWhen(game, undefined, TZ, trip.startDay), '2026-11-13', 20 * 60)
     const next = commitWhen(trip, game.id, w)
     const moved = item(next, game.id)
     expect(anchoredSlot(moved, TZ)).toEqual({ day: '2026-11-13', start: 18 * 60 + 30, end: 23 * 60 })
-    expect(moved.anchors.find((a) => a.label === 'Puck drop')).toMatchObject({ day: '2026-11-13', time: 20 * 60 })
+    expect(moved.anchors.find((a) => a.label === 'Doors (est.)')).toMatchObject({ day: '2026-11-13', time: 18 * 60 + 30 })
     expect(blocksOf(next, game.id)).toEqual([expect.objectContaining({ day: '2026-11-13', start: 18 * 60 + 30, end: 23 * 60, locked: true })])
+  })
+
+  it('typing a new start keeps the length but leaves the other times alone', () => {
+    const trip = helsinkiTrip()
+    const w = moveStart(readWhen(item(trip, 'i-game1'), undefined, TZ, trip.startDay), '2026-11-12', 19 * 60 + 30)
+    expect([w.start, w.end]).toEqual([19 * 60 + 30, 22 * 60 + 30])
+    expect(w.moments.map((a) => a.time)).toEqual([17 * 60 + 30])
+  })
+
+  it('saves a typed start without the end jumping to the other times', () => {
+    const trip = helsinkiTrip()
+    const game = item(trip, 'i-game1')
+    const w = moveStart(readWhen(game, undefined, TZ, trip.startDay), '2026-11-12', 13 * 60)
+    const next = commitWhen(trip, game.id, w)
+    const back = readWhen(item(next, game.id), blocksOf(next, game.id)[0], TZ, trip.startDay)
+    expect([back.start, back.end]).toEqual([13 * 60, 16 * 60])
+    expect(back.moments.map((a) => a.time)).toEqual([17 * 60 + 30])
+  })
+
+  it('the nudges move every time together', () => {
+    const trip = helsinkiTrip()
+    const w = shiftAll(readWhen(item(trip, 'i-game1'), undefined, TZ, trip.startDay), 60)
+    expect([w.start, w.end, w.moments[0].time]).toEqual([20 * 60, 23 * 60, 18 * 60 + 30])
   })
 
   it('sets the end time, not a "usual" duration', () => {
@@ -122,13 +146,29 @@ describe('changing when', () => {
     expect(blocksOf(commitWhen(t, 'i-new', w, { addToPlan: true }), 'i-new')).toEqual([expect.objectContaining({ day: '2026-11-15', start: 19 * 60 })])
   })
 
-  it('lets a moment before the start become the start (doors before the show)', () => {
+  it('keeps doors before the start as doors, and the start as the start', () => {
     const trip = helsinkiTrip()
-    const idea = item(trip, 'i-kallio')
-    const w = moveStart({ ...readWhen(idea, undefined, TZ, '2026-11-15'), set: true }, '2026-11-15', 19 * 60)
-    const s = settle({ ...w, main: { id: 'm', label: 'Starts', day: w.day, time: w.start, hard: true }, moments: [{ id: 'd', label: 'Doors', day: '2026-11-15', time: 18 * 60 + 30, hard: false }] }, TZ)
-    expect(s.start).toBe(18 * 60 + 30)
-    expect(s.main?.label).toBe('Doors')
-    expect(s.moments.map((a) => [a.label, a.time])).toEqual([['Starts', 19 * 60]])
+    const idea: Item = { ...item(trip, 'i-kallio'), id: 'i-new' }
+    const t = { ...trip, items: [...trip.items, idea] }
+    let w = moveStart({ ...readWhen(idea, undefined, TZ, '2026-11-15'), set: true }, '2026-11-15', 19 * 60)
+    w = { ...w, moments: [{ id: 'd', label: 'Starts', day: '2026-11-15', time: 18 * 60 + 30, hard: false }] }
+    expect(earlyMoments(w, TZ).map((x) => x.min)).toEqual([18 * 60 + 30])
+    const next = commitWhen(t, 'i-new', w, { addToPlan: true })
+    const back = readWhen(item(next, 'i-new'), blocksOf(next, 'i-new')[0], TZ, '2026-11-15')
+    // Even a label that sounds like a start stays a side time: the card remembers which one is the start.
+    expect(back.start).toBe(19 * 60)
+    expect(back.moments.map((a) => [a.label, a.time])).toEqual([['Starts', 18 * 60 + 30]])
+    // On the plan you're there from the earliest time.
+    expect(blocksOf(next, 'i-new')[0]).toMatchObject({ start: 18 * 60 + 30 })
+  })
+
+  it('keeps a can’t-miss time when the start itself can move', () => {
+    const trip = helsinkiTrip()
+    const game = item(trip, 'i-game1')
+    const w = readWhen(game, undefined, TZ, trip.startDay)
+    const next = commitWhen(trip, game.id, { ...w, fixed: false, moments: w.moments.map((a) => ({ ...a, hard: true })) })
+    const back = readWhen(item(next, game.id), undefined, TZ, trip.startDay)
+    expect(back.fixed).toBe(false)
+    expect(back.moments[0].hard).toBe(true)
   })
 })

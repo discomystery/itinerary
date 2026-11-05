@@ -866,10 +866,11 @@ button.o:active { transform: scale(0.99); }
 .whenpn .wh { font-size: 12px; line-height: 1.35; color: var(--sub); margin: 6px 0 0; }
 .whenpn .seg > button { padding-top: 6px; padding-bottom: 6px; }
 .wrows { display: flex; flex-direction: column; gap: 5px; margin-top: 8px; }
-.wrow { display: grid; grid-template-columns: 54px 1.25fr 1fr; gap: 6px; align-items: center; }
+.wrow { display: grid; grid-template-columns: 54px minmax(0, 1fr) auto; gap: 6px; align-items: center; }
 .wrow.noday { grid-template-columns: 54px 1fr; }
 .wrow > small { font: 600 9.5px/1.15 var(--mono); letter-spacing: 0.07em; text-transform: uppercase; color: var(--sub); overflow: hidden; text-overflow: ellipsis; }
-.wf { position: relative; background: var(--chrome); border: 1px solid var(--line); border-radius: 9px; padding: 6px 10px; min-width: 0; cursor: pointer; }
+.wf { position: relative; background: var(--chrome); border: 1px solid var(--line); border-radius: 9px; padding: 7px 26px 7px 10px; min-width: 0; cursor: pointer; }
+.wf .wfc { position: absolute; right: 7px; top: 50%; width: 14px; height: 14px; margin-top: -7px; color: var(--sub); pointer-events: none; }
 .wf b { font: 700 15px/1.1 var(--mono); white-space: nowrap; display: block; overflow: hidden; text-overflow: ellipsis; }
 .wf input, .wf select { position: absolute; inset: 0; opacity: 0; width: 100%; cursor: pointer; }
 .wf:focus-within { outline: 2px solid var(--act); outline-offset: 1px; }
@@ -891,6 +892,7 @@ button.o:active { transform: scale(0.99); }
 .moments .sl { margin: 0 0 6px; }
 .mom { display: flex; align-items: center; gap: 5px; margin-top: 5px; }
 .mom .input { min-width: 0; }
+.mom select.input { flex: none; width: 5.6rem; }
 .mom .lockb { margin-left: 0; flex: none; width: 30px; height: 30px; }
 .addplan { display: flex; align-items: center; gap: 8px; margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--line); font-size: 13px; font-weight: 500; }
 .addplan input { accent-color: var(--ink); width: 16px; height: 16px; }
@@ -898,9 +900,33 @@ details.more > summary { list-style: none; display: flex; align-items: center; g
 details.more > summary::-webkit-details-marker { display: none; }
 details.more > summary svg { transition: transform 0.15s; transform: rotate(-90deg); }
 details.more[open] > summary svg { transform: none; }
-.mom input[type='time'] { width: 8.6rem; flex: none; }
 .kindpick { display: flex; align-items: center; gap: 8px; }
 .kindpick b { flex: 1; font: 600 14px/1.2 var(--sans); }
+
+/* Typing a time: hour and minute boxes you type over, arrows on the one you're in, an AM/PM switch. */
+.tf { position: relative; display: inline-flex; align-items: center; gap: 1px; flex: none; background: var(--chrome); border: 1px solid var(--line); border-radius: 9px; padding: 3px 4px; }
+.tf.focus { border-color: var(--act); box-shadow: 0 0 0 3px color-mix(in srgb, var(--act) 18%, transparent); }
+.tf.off { opacity: 0.55; }
+.tfp { position: relative; display: inline-flex; }
+.tfs { width: 2.35em; padding: 4px 0; border: 0; border-radius: 6px; text-align: center; font: 700 15px/1.1 var(--mono); font-variant-numeric: tabular-nums; color: var(--ink); background: color-mix(in srgb, var(--ink) 6%, transparent); caret-color: var(--act); cursor: text; outline: none; }
+.tfs:hover { background: color-mix(in srgb, var(--ink) 10%, transparent); }
+.tfp.on .tfs { background: color-mix(in srgb, var(--act) 16%, transparent); box-shadow: inset 0 -2px 0 var(--act); }
+.tfs::placeholder { color: var(--ink); opacity: 0.32; }
+.tfc { font: 700 15px/1 var(--mono); color: var(--sub); padding: 0 1px; }
+.tfa { position: absolute; left: 50%; z-index: 6; width: 34px; height: 24px; margin-left: -17px; display: none; place-items: center; border: 1px solid var(--line); border-radius: 7px; background: var(--chrome); color: var(--ink); cursor: pointer; box-shadow: 0 2px 6px rgb(0 0 0 / 0.12); }
+.tfa svg { width: 16px; height: 16px; }
+.tfa.up { bottom: calc(100% + 5px); }
+.tfa.dn { top: calc(100% + 5px); }
+.tfa:active { background: var(--act); color: var(--chrome); }
+.tfp.on .tfa { display: grid; }
+.tfm { display: inline-flex; margin-left: 4px; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; }
+.tfm button, .ctog button { padding: 5px 6px; font: 600 10.5px/1 var(--mono); color: var(--sub); background: none; border: 0; cursor: pointer; }
+.tfm button + button, .ctog button + button { border-left: 1px solid var(--line); }
+.tfm button[aria-pressed='true'], .ctog button[aria-pressed='true'] { background: var(--ink); color: var(--chrome); }
+.ctog { display: inline-flex; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; letter-spacing: 0; text-transform: none; }
+.ctog button, .sl .ctog button { padding: 3px 6px; font: 600 10px/1 var(--mono); letter-spacing: 0; color: var(--sub); }
+.sl .ctog button[aria-pressed='true'] { background: var(--ink); color: var(--chrome); }
+.sl.whead { align-items: center; }
 
 /* Tracks: groups of people with their own part of the itinerary. */
 .tdot { width: 10px; height: 10px; border-radius: 3px; background: var(--tc, var(--sub)); flex: none; display: inline-block; }

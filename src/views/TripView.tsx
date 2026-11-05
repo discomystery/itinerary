@@ -34,8 +34,9 @@ export default function TripView() {
   const viewer = useStore((s) => s.viewer)
   const simNow = useStore((s) => s.simNow)
   const mapsApp = useStore((s) => s.mapsApp)
+  const hour24 = useStore((s) => s.hour24)
   const organizer = useStore((s) => s.organizer)
-  const { mutate, addPerson, updatePerson, removePerson, replaceTrip, startFresh, setViewer, setOrganizer, setSimNow, setMapsApp } = useStore()
+  const { mutate, addPerson, updatePerson, removePerson, replaceTrip, startFresh, setViewer, setOrganizer, setSimNow, setMapsApp, setHour24 } = useStore()
   const now = useNow()
   const [newPerson, setNewPerson] = useState('')
   const [msg, setMsg] = useState<string | null>(null)
@@ -89,6 +90,11 @@ export default function TripView() {
               {(['apple', 'google'] as MapsApp[]).map((a) => (
                 <button key={a} aria-pressed={mapsApp === a} onClick={() => setMapsApp(a)}>{MAPS_APP_NAME[a]}</button>
               ))}
+            </div>
+            <div className="sl" style={{ margin: '12px 0 6px' }}><span>Clock</span><span>This device</span></div>
+            <div className="modes" style={{ gridTemplateColumns: 'repeat(2, 1fr)' }}>
+              <button aria-pressed={!hour24} onClick={() => setHour24(false)}>12 hour · 7:30p</button>
+              <button aria-pressed={hour24} onClick={() => setHour24(true)}>24 hour · 19:30</button>
             </div>
           </div>
         </div>

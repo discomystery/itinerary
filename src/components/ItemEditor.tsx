@@ -3,7 +3,7 @@ import { Circle, CircleMarker, MapContainer, TileLayer, useMapEvents } from 'rea
 import { hoursError, hoursSummary } from '../lib/hours'
 import { searchPlaces, type PlaceHit } from '../lib/places'
 import { MAPS_APP_NAME, placeUrl } from '../lib/transit'
-import { addDays, dayLabel, dayRange, fmtDuration, fmtTime, parseHHMM, toHHMM } from '../lib/time'
+import { addDays, dayLabel, dayRange, fmtDuration, fmtTime } from '../lib/time'
 import { airport, applyLegs, flightIssues, flightSpan, isLegAnchor, layovers, legFromCard, PER_LEG_FIELDS } from '../lib/flights'
 import { uid, useStore } from '../store'
 import type { Anchor, CardKind, FlightLeg, Item, LatLng } from '../types'
@@ -13,6 +13,7 @@ import { currencyOf } from '../lib/costs'
 import { commitWhen, readWhen, writeWhen } from '../lib/when'
 import { glyphFor, ObjectCard } from './objects'
 import { WhenFields } from './when'
+import { TimeField } from './TimeField'
 import { AudiencePicker } from './tracks'
 import { tracksOf } from '../lib/tracks'
 import { Avatar, cx, Field, InterestPicker, Sheet } from './ui'
@@ -237,10 +238,7 @@ function AnchorEditor({ anchors, days, tripTz, presets, onChange }: { anchors: A
               <select className="input w-auto py-1" value={a.day} onChange={(e) => upd(a.id, { day: e.target.value })}>
                 {[...new Set([...days, a.day])].sort().map((d) => <option key={d} value={d}>{dayLabel(d)}</option>)}
               </select>
-              <input type="time" className="input w-auto py-1" value={toHHMM(a.time)} onChange={(e) => {
-                const t = parseHHMM(e.target.value)
-                if (t != null) upd(a.id, { time: t })
-              }} />
+              <TimeField value={a.time} label={a.label || 'Time'} onChange={(t) => upd(a.id, { time: t })} />
               <select className="input w-auto py-1" value={a.tz ?? ''} onChange={(e) => upd(a.id, { tz: e.target.value || undefined })}>
                 <option value="">{tripTz.split('/')[1]} time</option>
                 {TZ_CHOICES.filter((z) => z !== tripTz).map((z) => <option key={z} value={z}>{z.split('/')[1]?.replace('_', ' ') ?? z} time</option>)}
@@ -459,10 +457,7 @@ function LegEditor({ item, day, tripTz, onChange }: { item: Item; day: string; t
                   <div key={end} className="flex flex-wrap items-center gap-1.5">
                     <span className="w-12 text-xs t-sub">{end === 'depart' ? 'Leaves' : 'Lands'}</span>
                     <input type="date" className="input w-auto py-1" value={t.day} onChange={(e) => e.target.value && put({ day: e.target.value })} />
-                    <input type="time" className="input w-auto py-1" value={toHHMM(t.time)} onChange={(e) => {
-                      const v = parseHHMM(e.target.value)
-                      if (v != null) put({ time: v })
-                    }} />
+                    <TimeField value={t.time} label={end === 'depart' ? 'Leaves' : 'Lands'} onChange={(v) => put({ time: v })} />
                     {known && !t.tz ? (
                       <span className="text-xs t-sub">{known.city} time</span>
                     ) : (

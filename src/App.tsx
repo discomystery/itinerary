@@ -9,6 +9,7 @@ import { type Tab, useStore } from './store'
 import { importFromHash } from './lib/share'
 import { useInboxLookups } from './lib/useInboxLookups'
 import { useLayout } from './lib/useLayout'
+import { setHour24 } from './lib/time'
 import BoardView from './views/BoardView'
 import IdeasView from './views/IdeasView'
 import MapView from './views/MapView'
@@ -25,7 +26,10 @@ const TABS: { id: Tab; Icon: LucideIcon; label: string }[] = [
 ]
 
 export default function App() {
-  const { tab, setTab, trip, history: past, undo, editing, edit, selected } = useStore()
+  const { tab, setTab, trip, history: past, undo, editing, edit, selected, hour24 } = useStore()
+  // Before anything below prints a time. Views remount on a change so cached text catches up.
+  setHour24(hour24)
+  const clockKey = hour24 ? 'h24' : 'h12'
   const [shareMsg, setShareMsg] = useState<string | null>(null)
   const main = useRef<HTMLElement>(null)
   const layout = useLayout()
@@ -76,7 +80,7 @@ export default function App() {
         <div className="panes">
           <main ref={main} className={cx('pane', tab === 'map' || tab === 'plan' ? 'overflow-hidden' : 'overflow-y-auto')}>
             {toast}
-            <ErrorBoundary resetKey={tab}>
+            <ErrorBoundary key={clockKey} resetKey={tab}>
               {tab === 'now' && <NowView />}
               {tab === 'plan' && <BoardView />}
               {tab === 'map' && <MapView />}
@@ -84,7 +88,7 @@ export default function App() {
               {tab === 'trip' && <TripView />}
             </ErrorBoundary>
           </main>
-          <ErrorBoundary resetKey={`${tab}:${selected}`}>{aside}</ErrorBoundary>
+          <ErrorBoundary key={clockKey} resetKey={`${tab}:${selected}`}>{aside}</ErrorBoundary>
         </div>
         {editing && <ErrorBoundary resetKey={editing}><ItemEditor id={editing} onClose={() => edit(null)} /></ErrorBoundary>}
       </div>
@@ -107,7 +111,7 @@ export default function App() {
       {toast}
 
       <main ref={main} className={cx('min-h-0 flex-1', tab === 'map' ? 'overflow-hidden' : 'overflow-y-auto')}>
-        <ErrorBoundary resetKey={tab}>
+        <ErrorBoundary key={clockKey} resetKey={tab}>
           {tab === 'now' && <NowView />}
           {tab === 'plan' && <PlanView />}
           {tab === 'map' && <MapView />}

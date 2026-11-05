@@ -85,6 +85,21 @@ const sortAnchors = (anchors: Anchor[], tz: string) =>
     return x.day.localeCompare(y.day) || x.min - y.min
   })
 
+/** Times that come before the thing itself, so are never its start on their own. */
+const BEFORE = /^(doors|gates|boarding|check-in closes|bag drop)/i
+
+/**
+ * The anchor that's the official start: the one the card says, else the first
+ * time that isn't a doors-style "before" time, else simply the earliest.
+ */
+export function mainAnchor(item: Item, tz: string): Anchor | null {
+  if (!item.anchors.length) return null
+  const picked = item.startsAt && item.anchors.find((a) => a.id === item.startsAt)
+  if (picked) return picked
+  const sorted = sortAnchors(item.anchors, tz)
+  return sorted.find((a) => !BEFORE.test(a.label)) ?? sorted[0]
+}
+
 /** How an item (and its slot on the plan, if any) reads in the When editor. */
 export function readWhen(item: Item, block: Block | undefined, tz: string, fallbackDay: string): When {
   const takes = item.duration.typical || 60
@@ -93,7 +108,7 @@ export function readWhen(item: Item, block: Block | undefined, tz: string, fallb
     const sorted = sortAnchors(item.anchors, tz)
     const span = spanOf(item, tz)
     if (span) {
-      const moments = sorted.filter((a) => a.id !== span.from.anchor.id && a.id !== span.to.anchor.id)
+      const moments = item.anchors.filter((a) => a.id !== span.from.anchor.id && a.id !== span.to.anchor.id)
       return {
         ...base,
         set: true,
@@ -102,7 +117,7 @@ export function readWhen(item: Item, block: Block | undefined, tz: string, fallb
         start: span.allDay ? 0 : span.from.min,
         endDay: span.to.day,
         end: span.allDay ? 0 : span.to.min,
-        fixed: item.anchors.some((a) => a.hard),
+        fixed: span.from.anchor.hard,
         moments,
         main: span.from.anchor,
         last: span.allDay && span.to.anchor.id === span.from.anchor.id ? null : span.to.anchor,
@@ -110,17 +125,23 @@ export function readWhen(item: Item, block: Block | undefined, tz: string, fallb
     }
     const slot = anchoredSlot(item, tz)!
     const end = norm(slot.day, slot.end)
+    if (isFlight(item)) {
+      return { ...base, set: true, allDay: false, day: slot.day, start: slot.start, endDay: end.day, end: end.min, fixed: item.anchors.some((a) => a.hard) || !!block?.locked, main: sorted[0] ?? null }
+    }
+    const main = mainAnchor(item, tz)!
+    const at = anchorInTrip(main, tz)
     return {
       ...base,
       set: true,
       allDay: false,
-      day: slot.day,
-      start: slot.start,
+      day: at.day,
+      start: at.min,
       endDay: end.day,
       end: end.min,
-      fixed: item.anchors.some((a) => a.hard) || !!block?.locked,
-      moments: isFlight(item) ? [] : sorted.slice(1),
-      main: sorted[0] ?? null,
+      fixed: main.hard,
+      // In the card's own order, so a row never jumps while you're typing in it.
+      moments: item.anchors.filter((a) => a.id !== main.id),
+      main,
     }
   }
   if (block) {
@@ -132,25 +153,34 @@ export function readWhen(item: Item, block: Block | undefined, tz: string, fallb
   return { ...base, set: false, allDay: false, day: fallbackDay, start, endDay: end.day, end: end.min }
 }
 
-/** A moment set before the start becomes the start (doors before the show): the plan begins there. */
-export function settle(w: When, tz: string): When {
-  if (!w.set || w.allDay || !w.moments.length) return w
-  const at = (a: Anchor) => {
-    const p = anchorInTrip(a, tz)
-    return absMin(p.day, p.min, w.day)
-  }
-  const first = w.moments.reduce((m, a) => (at(a) < at(m) ? a : m))
-  if (at(first) >= w.start) return w
-  const old = w.main ? [placeAnchor(w.main, w.day, w.start, tz)] : []
-  const p = norm(w.day, at(first))
-  return { ...w, day: p.day, start: p.min, main: first, moments: [...old, ...w.moments.filter((a) => a.id !== first.id)] }
+/**
+ * Type a new start. The length stays the same, so the end follows; the other
+ * times (doors, last entry) are their own and stay where they are. Picking
+ * another day moves the whole thing to that day.
+ */
+export function moveStart(w: When, day: string, start: number): When {
+  if (day !== w.day) return shiftAll(w, absMin(day, start, w.day) - w.start)
+  const delta = start - w.start
+  const end = norm(w.endDay, w.end + delta)
+  return { ...w, start, endDay: end.day, end: end.min }
 }
 
-/** Move the start, keeping the length and every moment in step. */
-export function moveStart(w: When, day: string, start: number): When {
-  const delta = absMin(day, start, w.day) - w.start
+/** Move everything together, start, end and every other time: the −1h / +15 nudges. */
+export function shiftAll(w: When, delta: number): When {
+  const s = norm(w.day, w.start + delta)
   const end = norm(w.endDay, w.end + delta)
-  return { ...w, day, start, endDay: end.day, end: end.min, moments: w.moments.map((a) => shiftAnchor(a, delta)) }
+  return { ...w, day: s.day, start: s.min, endDay: end.day, end: end.min, moments: w.moments.map((a) => shiftAnchor(a, delta)) }
+}
+
+/** The other times that come before the start, earliest first, in trip time. */
+export function earlyMoments(w: When, tz: string): { a: Anchor; min: number }[] {
+  return w.moments
+    .map((a) => {
+      const p = anchorInTrip(a, tz)
+      return { a, min: absMin(p.day, p.min, w.day) }
+    })
+    .filter((x) => x.min < w.start)
+    .sort((x, y) => x.min - y.min)
 }
 
 /** Set the end. An end at or before the start means the next day (a late night out). */
@@ -168,24 +198,20 @@ export function writeWhen(item: Item, w: When, tz: string): Partial<Item> {
   if (isFlight(item)) return {}
   const d = item.duration
   if (!w.set) {
-    return { anchors: [], allDay: undefined, duration: { min: Math.min(d.min, w.takes), typical: w.takes, max: Math.max(d.max, w.takes) } }
+    return { anchors: [], startsAt: undefined, allDay: undefined, duration: { min: Math.min(d.min, w.takes), typical: w.takes, max: Math.max(d.max, w.takes) } }
   }
   const lb = labelsFor(item)
   const main = w.main ?? { id: uid(), label: lb.start, day: w.day, time: w.start, hard: w.fixed }
   const multi = isMultiDay(item, w)
   const allDay = w.allDay
-  const anchors: Anchor[] = [placeAnchor(main, w.day, allDay ? 0 : w.start, tz), ...w.moments]
+  // The lock is the start's own; doors and the like keep their own can't-miss flags.
+  const anchors: Anchor[] = [{ ...placeAnchor(main, w.day, allDay ? 0 : w.start, tz), hard: w.fixed }, ...w.moments]
   if (multi) anchors.push(placeAnchor(w.last ?? { id: uid(), label: lb.end, day: w.endDay, time: w.end, hard: false }, w.endDay, allDay ? 0 : w.end, tz))
-  const fixedAnchors = w.fixed
-    ? anchors.some((a) => a.hard) ? anchors : anchors.map((a, n) => (n === 0 ? { ...a, hard: true } : a))
-    : anchors.map((a) => ({ ...a, hard: false }))
-  const out: Partial<Item> = { anchors: fixedAnchors, allDay: allDay || undefined }
+  const out: Partial<Item> = { anchors: anchors, startsAt: main.id, allDay: allDay || undefined }
   if (!multi && !allDay) {
-    // The plan ends `typical` after the last time on its first day.
+    // It runs `typical` from its start to its end, whatever other times it has.
     const len = lengthOf(w)
-    const bare = anchoredSlot({ ...item, anchors: fixedAnchors, duration: { min: 0, typical: 0, max: 0 } }, tz)!
-    const typical = Math.max(0, absMin(w.endDay, w.end, w.day) - bare.end)
-    out.duration = { min: Math.min(d.min, len), typical, max: Math.max(d.max, len) }
+    out.duration = { min: Math.min(d.min, len), typical: Math.max(0, len), max: Math.max(d.max, len) }
   }
   return out
 }
@@ -216,7 +242,7 @@ export function commitWhen(trip: Trip, itemId: string, w: When, opts: CommitOpts
     blocks = blocks.filter((b) => b.itemId !== itemId)
   } else if (w.set) {
     const slot = isFlight(next) ? null : anchoredSlot(next, trip.timezone)
-    const locked = next.anchors.some((a) => a.hard)
+    const locked = w.fixed
     if (slot && target) blocks = blocks.map((b) => (b.id === target.id ? { ...b, day: slot.day, start: slot.start, end: slot.end, locked } : b))
     else if (slot && opts.addToPlan && !isMultiDay(next, w)) blocks = [...blocks, { id: `b-${uid()}`, itemId, day: slot.day, start: slot.start, end: slot.end, locked }]
   } else if (target && opts.blockId) {
