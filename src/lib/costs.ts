@@ -1,4 +1,5 @@
 import type { Block, Item, Trip } from '../types'
+import { audience } from './tracks'
 
 // Planned spending: a price on any idea, totalled per day and for the trip.
 // Each idea counts once, on the first day it's scheduled, so a hotel with a
@@ -17,14 +18,14 @@ export function fmtMoney(n: number, currency: string): string {
   }
 }
 
-/** How many people a plan is for: its `who`, or everyone. */
-const heads = (trip: Trip, b?: Block) => Math.max(1, b?.who?.length || trip.people.length)
+/** How many people a plan is for: its track or people, or everyone. */
+const heads = (trip: Trip, item: Item, b?: Block) => Math.max(1, audience(trip, item, b)?.length || trip.people.length)
 
 /** What the whole group pays, and what each person pays. */
 export function costOf(trip: Trip, item: Item, b?: Block): { total: number; each: number } | null {
   const c = item.cost
   if (!c || !(c.amount > 0)) return null
-  const n = heads(trip, b)
+  const n = heads(trip, item, b)
   return c.per === 'person' ? { total: c.amount * n, each: c.amount } : { total: c.amount, each: c.amount / n }
 }
 

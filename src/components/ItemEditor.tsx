@@ -13,6 +13,8 @@ import { currencyOf } from '../lib/costs'
 import { commitWhen, readWhen, writeWhen } from '../lib/when'
 import { glyphFor, ObjectCard } from './objects'
 import { WhenFields } from './when'
+import { AudiencePicker } from './tracks'
+import { tracksOf } from '../lib/tracks'
 import { Avatar, cx, Field, InterestPicker, Sheet } from './ui'
 
 const TZ_CHOICES = ['America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles', 'Europe/London', 'UTC']
@@ -87,6 +89,14 @@ export default function ItemEditor({ id, onClose }: { id: string; onClose: () =>
         </div>
 
         <WhenFields item={d} w={w} tz={trip.timezone} days={days} scheduled={!!block} onChange={setW} addToPlan={addToPlan} onAddToPlan={setAddToPlan} />
+
+        {trip.people.length > 1 && (
+          <div>
+            <span className="label mb-1 block">Who's this for</span>
+            <AudiencePicker trip={trip} value={d} onChange={(a) => set({ track: a.track, who: a.who })} />
+            {!tracksOf(trip).length && <span className="mt-1 block text-xs t-sub">Set up tracks under Trip to give a group its own flights, stays and plans.</span>}
+          </div>
+        )}
 
         <CardPicker item={d} onChange={set} />
 

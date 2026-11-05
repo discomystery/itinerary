@@ -901,3 +901,18 @@ details.more[open] > summary svg { transform: none; }
 .mom input[type='time'] { width: 8.6rem; flex: none; }
 .kindpick { display: flex; align-items: center; gap: 8px; }
 .kindpick b { flex: 1; font: 600 14px/1.2 var(--sans); }
+
+/* Tracks: groups of people with their own part of the itinerary. */
+.tdot { width: 10px; height: 10px; border-radius: 3px; background: var(--tc, var(--sub)); flex: none; display: inline-block; }
+.going .tdot { margin-left: 7px; }
+.going button:disabled { opacity: 0.45; cursor: default; }
+.atag { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; padding-left: 6px; flex: none; max-width: 48%; color: inherit; font: 700 9.5px/1 var(--mono); letter-spacing: 0.06em; text-transform: uppercase; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.atag .tdot { width: 8px; height: 8px; border-radius: 2px; }
+.atag i { width: 12px; height: 12px; border-radius: 50%; display: grid; place-items: center; color: #fff; font: 700 7px/1 var(--sans); font-style: normal; margin-right: -2px; box-shadow: 0 0 0 1px var(--p-paper, #fff); }
+.atag i:last-of-type { margin-right: 2px; }
+.o .eb > .atag { overflow: hidden; }
+.track-row { display: flex; flex-direction: column; gap: 8px; }
+.track-row .tpeople { padding: 0 12px 10px 50px; }
+.tswatch { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; color: #fff; flex: none; }
+.tswatch svg { width: 15px; height: 15px; }
+.seg3.scope button { display: grid; place-items: center; }

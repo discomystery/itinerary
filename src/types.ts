@@ -10,6 +10,25 @@ export interface Person {
   color: string
 }
 
+/**
+ * A named group of people who share part of the itinerary, e.g. everyone
+ * flying in from Raleigh. Cards can be for a track, so changing who's in it
+ * changes everyone's itinerary at once.
+ */
+export interface Track {
+  id: Id
+  name: string
+  color: string
+  people: Id[]
+}
+
+/** Who a card or plan is for. Neither set means the whole group. */
+export interface Audience {
+  track?: Id
+  /** Specific people, when it isn't a whole track. */
+  who?: Id[]
+}
+
 export type ItemType = 'place' | 'event' | 'reservation' | 'area' | 'transport' | 'note'
 
 export type Interest = 'must' | 'yes' | 'meh' | 'no'
@@ -47,7 +66,7 @@ export interface Duration {
 
 export type HoursSource = 'osm' | 'manual' | 'unverified'
 
-export interface Item {
+export interface Item extends Audience {
   id: Id
   title: string
   type: ItemType
@@ -157,8 +176,9 @@ export interface Block {
   locked: boolean
   /** How the group gets *to* this block from the previous one. */
   modeIn?: TransitMode
-  /** If set, only these people are in this block (group splits, later). */
+  /** Who's on this one time, when it differs from the card's own audience (a repeat with different people). */
   who?: Id[]
+  track?: Id
 }
 
 export interface Trip {
@@ -176,4 +196,6 @@ export interface Trip {
   docs?: TravelDoc[]
   /** ISO 4217 code for prices, e.g. "EUR". */
   currency?: string
+  /** Groups of people with their own parts of the itinerary. */
+  tracks?: Track[]
 }

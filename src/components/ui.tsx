@@ -16,7 +16,8 @@ import {
   X,
 } from 'lucide-react'
 import { type ReactNode, useEffect } from 'react'
-import type { Block, Interest, Item, ItemType, Person } from '../types'
+import type { Block, Interest, Item, ItemType, Person, Trip } from '../types'
+import { audienceLabel } from '../lib/tracks'
 import type { Issue, Severity } from '../lib/schedule'
 
 export const TYPE_META: Record<ItemType, { Icon: LucideIcon; label: string; color: string }> = {
@@ -111,11 +112,13 @@ export function InterestPicker({ value, onChange, size = 'md' }: {
 }
 
 /** Stamped initials for everyone who wants to go, or, on a plan the organizer assigned, everyone going. */
-export function Votes({ item, people, block, min = 'yes' }: { item: Item; people: Person[]; block?: Block; min?: 'must' | 'yes' }) {
-  if (block?.who?.length) {
-    const going = people.filter((p) => block.who!.includes(p.id))
+export function Votes({ item, people, block, trip, min = 'yes' }: { item: Item; people: Person[]; block?: Block; trip?: Trip; min?: 'must' | 'yes' }) {
+  const label = trip ? audienceLabel(trip, item, block) : null
+  const ids = label ? label.people.map((p) => p.id) : block?.who
+  if (ids?.length) {
+    const going = people.filter((p) => ids.includes(p.id))
     return (
-      <span className="votes assigned" title={`Going: ${going.map((p) => p.name).join(', ')}`}>
+      <span className="votes assigned" title={`Going: ${label?.track ? `${label.name} (${going.map((p) => p.name).join(', ')})` : going.map((p) => p.name).join(', ')}`}>
         {going.map((p) => <span key={p.id} style={{ background: p.color }}>{p.name.slice(0, 1).toUpperCase()}</span>)}
       </span>
     )

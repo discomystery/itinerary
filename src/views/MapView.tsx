@@ -9,7 +9,7 @@ import { hoursSummary } from '../lib/hours'
 import { dayBlocks, interestScore } from '../lib/schedule'
 import { dayLabel, dayRange } from '../lib/time'
 import { MAPS_APP_NAME, placeUrl } from '../lib/transit'
-import { ideas, useStore } from '../store'
+import { ideas, useStore, useViewTrip } from '../store'
 import type { Item, LatLng } from '../types'
 
 type Show = 'day' | 'all'
@@ -50,7 +50,7 @@ const numIcon = (n: number, color: string) =>
 
 /** `embedded` drops the day buttons where the day is picked elsewhere on screen. */
 export default function MapView({ embedded = false, defaultShow = 'day' }: { embedded?: boolean; defaultShow?: Show }) {
-  const trip = useStore((s) => s.trip)
+  const trip = useViewTrip()
   const day = useStore((s) => s.day)
   const viewer = useStore((s) => s.viewer)
   const organizer = useStore((s) => s.organizer)

@@ -1,4 +1,4 @@
-import { Banknote, CalendarDays, CalendarPlus, ChevronRight, Clock, Ellipsis, GripVertical, List, Lock, MapPin, Navigation, Pencil, Plus, StickyNote, Trash2, TriangleAlert, Undo2, Users } from 'lucide-react'
+import { Banknote, CalendarDays, CalendarPlus, ChevronRight, Clock, Ellipsis, GripVertical, List, Lock, MapPin, Navigation, Pencil, Plus, StickyNote, Trash2, TriangleAlert, Undo2 } from 'lucide-react'
 import { Fragment, type ReactNode, useMemo, useRef, useState } from 'react'
 import { clock, glyphFor, objectKind, ObjectCard } from '../components/objects'
 import { Horizon, LegPill, LegSheet, leaveAt, MODE_STYLE, RailGap, RailMark, railVars } from '../components/rail'
@@ -7,7 +7,7 @@ import { Ribbons } from '../components/ribbons'
 import { Weather } from '../components/weather'
 import { WhenFields } from '../components/when'
 import { commitWhen, readWhen } from '../lib/when'
-import { Avatar, cx, IssueList, Sheet, ViewHeader, Votes } from '../components/ui'
+import { cx, IssueList, Sheet, ViewHeader, Votes } from '../components/ui'
 import { daylight, hoursSummary, openSpans, openStatus } from '../lib/hours'
 import { useFetchRoutes, useRoutes } from '../lib/routeCache'
 import { type DayAnalysis, type Leg, analyzeDay, anchorOnDay, anchoredSlot, findSlot, interestScore, makeCtx, worstSeverity } from '../lib/schedule'
@@ -17,7 +17,8 @@ import { downloadCalendar } from '../lib/ics'
 import { directionsUrl } from '../lib/transit'
 import { useNow } from '../lib/useNow'
 import { useWeather } from '../lib/weather'
-import { ideas, itemById, useStore } from '../store'
+import { ideas, itemById, useStore, useViewTrip } from '../store'
+import { ScopeSwitch, WhoGoing } from '../components/tracks'
 import type { Block, Item, TransitMode, Trip } from '../types'
 
 const PX = 1.1 // pixels per minute in the Day view
@@ -26,7 +27,7 @@ const GUTTER = 42
 type Mode = 'list' | 'day'
 
 export default function PlanView() {
-  const trip = useStore((s) => s.trip)
+  const trip = useViewTrip()
   const day = useStore((s) => s.day)
   const setDay = useStore((s) => s.setDay)
   const days = dayRange(trip.startDay, trip.endDay)
@@ -78,6 +79,7 @@ export default function PlanView() {
               <button aria-pressed={mode === 'list'} onClick={() => pick('list')} title="List" aria-label="List"><List /></button>
               <button aria-pressed={mode === 'day'} onClick={() => pick('day')} title="Day" aria-label="Day"><CalendarDays /></button>
             </span>
+            <ScopeSwitch />
             <PrintButton trip={trip} day={day} weather={weather} />
             <button className="fab" onClick={() => setAddAt(-1)} aria-label="Add to this day"><Plus /></button>
           </>
@@ -552,7 +554,7 @@ export function BlockDetail({ id, analysis, onLeg, onEdit, card = true }: { id: 
           item={item} w={readWhen(item, b, trip.timezone, b.day)} tz={trip.timezone} days={days} scheduled
           onChange={(w) => mutate((t) => commitWhen(t, item.id, w, { blockId: b.id }))}
         />
-        <WhoGoing block={b} />
+        <WhoGoing block={b} item={item} />
         {leg && M && (
           <div className="pn">
             <div className="sl" style={{ margin: '0 0 8px' }}><span>Getting here</span><span className="truncate pl-2">from {from?.title}</span></div>
@@ -572,38 +574,6 @@ export function BlockDetail({ id, analysis, onLeg, onEdit, card = true }: { id: 
           </div>
         )}
       </div>
-  )
-}
-
-/** Who's on a plan. The organizer assigns it; everyone else sees it once it's narrowed down. */
-function WhoGoing({ block: b }: { block: Block }) {
-  const people = useStore((s) => s.trip.people)
-  const organizer = useStore((s) => s.organizer)
-  const updateBlock = useStore((s) => s.updateBlock)
-  const who = b.who?.length ? b.who : null
-  if (!organizer && !who) return null
-  const going = (id: string) => !who || who.includes(id)
-  // From "everyone", a tap picks just that person; after that, taps add and remove.
-  const toggle = (id: string) => {
-    const next = !who ? [id] : people.map((p) => p.id).filter((p) => (p === id ? !who.includes(p) : who.includes(p)))
-    // Nobody, or everybody, both mean the whole group.
-    updateBlock(b.id, { who: next.length && next.length < people.length ? next : undefined })
-  }
-  return (
-    <div className="pn">
-      <div className="sl" style={{ margin: '0 0 8px' }}>
-        <span>Who's going</span>
-        <span>{who ? `${who.length} of ${people.length}` : 'Everyone'}</span>
-      </div>
-      <div className="going">
-        {organizer && <button aria-pressed={!who} onClick={() => updateBlock(b.id, { who: undefined })}><Users /> Everyone</button>}
-        {people.map((p) => (
-          <button key={p.id} aria-pressed={!!who && going(p.id)} disabled={!organizer} onClick={() => toggle(p.id)} className={cx(!going(p.id) && 'out')}>
-            <Avatar person={p} size={20} /> {p.name}
-          </button>
-        ))}
-      </div>
-    </div>
   )
 }
 
