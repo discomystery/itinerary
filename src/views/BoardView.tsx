@@ -1,5 +1,5 @@
 import { CalendarRange, Columns3, Lock, Plus, TriangleAlert } from 'lucide-react'
-import { type CSSProperties, type DragEvent, Fragment, useEffect, useMemo, useRef, useState } from 'react'
+import { type CSSProperties, Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { clock, glyphFor, objectKind, ObjectCard } from '../components/objects'
 import { LegSheet, MODE_STYLE, railVars } from '../components/rail'
 import { Ribbons } from '../components/ribbons'
@@ -7,25 +7,26 @@ import { spanOf } from '../lib/cards'
 import { cx, ViewHeader } from '../components/ui'
 import { daylight } from '../lib/hours'
 import { useFetchRoutes, useRoutes } from '../lib/routeCache'
-import { type DayAnalysis, type Leg, analyzeDay, anchoredSlot, findSlot, interestScore, makeCtx, worstSeverity } from '../lib/schedule'
+import { type DayAnalysis, type Leg, analyzeDay, interestScore, makeCtx, worstSeverity } from '../lib/schedule'
 import { dayLabel, dayRange } from '../lib/time'
 import { ideas, itemById, useStore, useViewTrip } from '../store'
 import type { Trip } from '../types'
 import { AddSheet, columns, ListView } from './PlanView'
 import { ScopeSwitch } from '../components/tracks'
+import { dragProps, useDragging } from '../components/drag'
+import { canMove } from '../lib/move'
 
 // The big-screen Plan: every day of the trip at once. Board (the default) puts each
 // day in a column of paper cards with the ideas pool first; Week lays the same plans
 // on a real time grid. Picking a card shows it, unfolded, in the details pane.
+// Cards drag between days, to a spot in a day, onto a time, or back to Ideas.
 
 type Mode = 'board' | 'week'
-
-const DRAG = 'application/x-papermap-item'
 
 export default function BoardView() {
   const trip = useViewTrip()
   const day = useStore((s) => s.day)
-  const { setDay, select, addBlock } = useStore()
+  const { setDay, select } = useStore()
   const routes = useRoutes((s) => s.routes)
   const days = dayRange(trip.startDay, trip.endDay)
   const ctx = useMemo(() => makeCtx(trip, routes), [trip, routes])
@@ -56,17 +57,6 @@ export default function BoardView() {
     select(id)
     if (d) setDay(d)
   }
-  /** Drop an idea on a day: it lands in that day's first slot that fits, like Add does. */
-  const place = (d: string, itemId: string) => {
-    const item = itemById(trip, itemId)
-    if (!item) return
-    const anchored = anchoredSlot(item, trip.timezone)
-    // Items with set times only belong on their own day.
-    if (anchored && anchored.day !== d) return
-    const slot = anchored ?? findSlot(trip, d, item)
-    if (!slot) return
-    pick(addBlock({ itemId, day: d, start: slot.start, end: slot.end, locked: item.anchors.some((a) => a.hard) }), d)
-  }
   const plans = trip.blocks.filter((b) => b.day >= trip.startDay && b.day <= trip.endDay).length
 
   return (
@@ -86,9 +76,9 @@ export default function BoardView() {
         }
       />
       {mode === 'board' ? (
-        <Board trip={trip} days={days} analyses={analyses} onPick={pick} onAdd={setAddTo} onLeg={setOpenLeg} onPlace={place} />
+        <Board trip={trip} days={days} analyses={analyses} onPick={pick} onAdd={setAddTo} onLeg={setOpenLeg} />
       ) : (
-        <Week trip={trip} days={days} analyses={analyses} onPick={pick} onAdd={setAddTo} onLeg={setOpenLeg} onPlace={place} />
+        <Week trip={trip} days={days} analyses={analyses} onPick={pick} onAdd={setAddTo} onLeg={setOpenLeg} />
       )}
       {addTo && <AddSheet trip={trip} day={addTo} at={null} onClose={() => setAddTo(null)} />}
       {openLeg && <LegSheet leg={openLeg} onClose={() => setOpenLeg(null)} />}
@@ -103,26 +93,12 @@ interface PaneProps {
   onPick: (id: string, day?: string) => void
   onAdd: (day: string) => void
   onLeg: (l: Leg) => void
-  onPlace: (day: string, itemId: string) => void
 }
 
-/** Drop-target props for a day, highlighting while an idea hovers over it. */
-function useDrop(onPlace: (day: string, itemId: string) => void) {
-  const [over, setOver] = useState<string | null>(null)
-  const props = (d: string) => ({
-    onDragOver: (e: DragEvent) => {
-      if (!e.dataTransfer.types.includes(DRAG)) return
-      e.preventDefault()
-      if (over !== d) setOver(d)
-    },
-    onDragLeave: () => setOver((o) => (o === d ? null : o)),
-    onDrop: (e: DragEvent) => {
-      const id = e.dataTransfer.getData(DRAG)
-      setOver(null)
-      if (id) onPlace(d, id)
-    },
-  })
-  return { over, props }
+/** The day a dragged card is over, to light it up. */
+function useOver() {
+  const { target } = useDragging()
+  return target && (target.kind === 'day' || target.kind === 'list' || target.kind === 'grid') ? target.day : null
 }
 
 function Head({ d, a }: { d: string; a: DayAnalysis }) {
@@ -143,11 +119,11 @@ function Head({ d, a }: { d: string; a: DayAnalysis }) {
 
 /* ------------------------------- Board -------------------------------- */
 
-function Board({ trip, days, analyses, onPick, onAdd, onLeg, onPlace }: PaneProps) {
+function Board({ trip, days, analyses, onPick, onAdd, onLeg }: PaneProps) {
   const day = useStore((s) => s.day)
   const selected = useStore((s) => s.selected)
   const { setDay, select } = useStore()
-  const { over, props } = useDrop(onPlace)
+  const over = useOver()
   const ref = useRef<HTMLDivElement>(null)
   // Open on the current day's column.
   useEffect(() => {
@@ -164,7 +140,7 @@ function Board({ trip, days, analyses, onPick, onAdd, onLeg, onPlace }: PaneProp
         const [wd] = dayLabel(d).split(',')
         if (!a.blocks.length) {
           return (
-            <button key={d} className={cx('bstrip', over === d && 'over')} onClick={() => onAdd(d)} aria-label={`${dayLabel(d, 'long')}: free. Add a plan`} {...props(d)}>
+            <button key={d} className={cx('bstrip', over === d && 'over')} onClick={() => onAdd(d)} aria-label={`${dayLabel(d, 'long')}: free. Add a plan`} data-drop="day" data-day={d}>
               <small>{wd}</small>
               <b>{Number(d.slice(8))}</b>
               <span>{over === d ? 'Drop to plan' : 'Free day · add'}</span>
@@ -172,7 +148,7 @@ function Board({ trip, days, analyses, onPick, onAdd, onLeg, onPlace }: PaneProp
           )
         }
         return (
-          <section key={d} className={cx('bcol', d === day && 'cur', over === d && 'over')} aria-label={dayLabel(d, 'long')} {...props(d)}>
+          <section key={d} className={cx('bcol', d === day && 'cur', over === d && 'over')} aria-label={dayLabel(d, 'long')} data-drop="list" data-day={d}>
             <div className="bh">
               <button className="bt" onClick={() => setDay(d)}><Head d={d} a={a} /></button>
               <button className="ib" onClick={() => onAdd(d)} aria-label={`Add to ${dayLabel(d)}`}><Plus /></button>
@@ -201,28 +177,21 @@ function Board({ trip, days, analyses, onPick, onAdd, onLeg, onPlace }: PaneProp
 function IdeasColumn({ trip, onPick }: { trip: Trip; onPick: (id: string) => void }) {
   const selected = useStore((s) => s.selected)
   const { edit, addItem } = useStore()
+  const { payload, target } = useDragging()
   // Things running over several days are already on the board, as a ribbon on each day.
   const planned = new Set([...trip.blocks.map((b) => b.itemId), ...trip.items.filter((i) => spanOf(i, trip.timezone)).map((i) => i.id)])
   const list = ideas(trip)
     .filter((i) => !planned.has(i.id))
     .sort((a, b) => interestScore(b) - interestScore(a) || a.createdAt - b.createdAt)
   return (
-    <section className="bcol pool" aria-label="Unplanned ideas">
+    <section className={cx('bcol pool', target?.kind === 'ideas' && 'over')} aria-label="Unplanned ideas" data-drop="ideas">
       <div className="bh">
-        <span className="bt"><b>Ideas</b><small>{list.length} unplanned · drag onto a day</small></span>
+        <span className="bt"><b>Ideas</b><small>{target?.kind === 'ideas' ? 'Drop to unplan' : `${list.length} unplanned · drag onto a day`}</small></span>
         <button className="ib" onClick={() => edit(addItem({}))} aria-label="New idea"><Plus /></button>
       </div>
       <div className="bb">
         {list.map((i) => (
-          <div
-            key={i.id}
-            className={cx('pick', selected === i.id && 'sel')}
-            draggable
-            onDragStart={(e) => {
-              e.dataTransfer.setData(DRAG, i.id)
-              e.dataTransfer.effectAllowed = 'copy'
-            }}
-          >
+          <div key={i.id} className={cx('pick slot', selected === i.id && 'sel', payload?.id === i.id && 'lifted')} data-card {...dragProps({ kind: 'idea', id: i.id })}>
             <ObjectCard item={i} tz={trip.timezone} people={trip.people} onClick={() => onPick(i.id)} />
           </div>
         ))}
@@ -236,11 +205,19 @@ function IdeasColumn({ trip, onPick }: { trip: Trip; onPick: (id: string) => voi
 
 const PX = 0.9 // pixels per minute
 
-function Week({ trip, days, analyses, onPick, onAdd, onLeg, onPlace }: PaneProps) {
+function Week({ trip, days, analyses, onPick, onAdd, onLeg }: PaneProps) {
   const day = useStore((s) => s.day)
   const selected = useStore((s) => s.selected)
-  const { over, props } = useDrop(onPlace)
+  const over = useOver()
+  const { payload, target } = useDragging()
   const all = days.flatMap((d) => analyses[d].blocks)
+  // A plan being dragged shows in the column and at the time it would land.
+  const dragged = payload?.kind === 'block' ? all.find((b) => b.id === payload.id) : undefined
+  const landing = dragged && target?.kind === 'grid' ? { ...dragged, day: target.day, start: target.start, end: target.start + dragged.end - dragged.start } : null
+  const blocksOn = (d: string) => {
+    const list = landing ? analyses[d].blocks.filter((b) => b.id !== landing.id) : analyses[d].blocks
+    return landing?.day === d ? [...list, landing].sort((a, b) => a.start - b.start) : list
+  }
   const t0 = Math.floor(Math.min(9 * 60, ...all.map((b) => b.start - 30)) / 60) * 60
   const t1 = Math.ceil(Math.max(23 * 60, ...all.map((b) => b.end)) / 60) * 60
   const y = (m: number) => (m - t0) * PX
@@ -267,14 +244,15 @@ function Week({ trip, days, analyses, onPick, onAdd, onLeg, onPlace }: PaneProps
         {days.map((d) => {
           const a = analyses[d]
           const dl = daylight(d, trip.center.lat, trip.center.lng, trip.timezone)
-          const cols = columns(a.blocks)
+          const blocks = blocksOn(d)
+          const cols = columns(blocks)
           const legByTo = new Map(a.legs.map((l) => [l.toId, l]))
           const pos = (id: string) => {
             const { col, cols: n } = cols.get(id) ?? { col: 0, cols: 1 }
             return { left: `calc(4px + (100% - 8px) * ${col / n})`, width: `calc((100% - 8px) / ${n} - 2px)` }
           }
           return (
-            <div key={d} className={cx('cal', 'wc', d === day && 'cur', over === d && 'over')} {...props(d)} onClick={() => onAdd(d)}>
+            <div key={d} className={cx('cal', 'wc', d === day && 'cur', over === d && 'over')} data-drop="grid" data-day={d} data-t0={t0} data-px={PX} onClick={() => onAdd(d)}>
               {hours.map((m) => <div key={m} className="hr" style={{ top: y(m) }} />)}
               {dl && (
                 <>
@@ -282,10 +260,11 @@ function Week({ trip, days, analyses, onPick, onAdd, onLeg, onPlace }: PaneProps
                   <div className="dark" style={{ top: y(dl.sunset), bottom: 0 }} />
                 </>
               )}
-              {a.blocks.map((b) => {
+              {blocks.map((b) => {
                 const item = itemById(trip, b.itemId)
                 if (!item) return null
-                const leg = legByTo.get(b.id)
+                const moving = landing?.id === b.id
+                const leg = moving ? undefined : legByTo.get(b.id)
                 const sev = worstSeverity(a.issues.get(b.id)?.filter((i) => i.severity !== 'info'))
                 const Glyph = glyphFor(item)
                 const M = leg && MODE_STYLE[leg.mode].Icon
@@ -307,8 +286,10 @@ function Week({ trip, days, analyses, onPick, onAdd, onLeg, onPlace }: PaneProps
                     )}
                     <button
                       type="button"
-                      className={cx('ce', objectKind(item), sev === 'error' && 'err', sev === 'warn' && 'warn', selected === b.id && 'sel')}
+                      className={cx('ce', objectKind(item), sev === 'error' && 'err', sev === 'warn' && 'warn', selected === b.id && 'sel', moving && 'dragging', dragged?.id === b.id && !moving && 'lifted')}
                       style={{ ...pos(b.id), top: y(b.start), height: Math.max(20, (b.end - b.start) * PX - 2), paddingRight: 6, textAlign: 'left' }}
+                      data-card
+                      {...dragProps(canMove(trip, b) ? { kind: 'block', id: b.id } : null)}
                       onClick={(e) => {
                         e.stopPropagation()
                         onPick(b.id, d)
@@ -318,7 +299,7 @@ function Week({ trip, days, analyses, onPick, onAdd, onLeg, onPlace }: PaneProps
                         {b.locked ? <Lock /> : sev ? <TriangleAlert style={{ color: sev === 'error' ? '#c8102e' : '#b45309' }} /> : <Glyph />}
                         {item.title}
                       </span>
-                      {(b.end - b.start) * PX > 32 && <span className="tm block">{clock(b.start)}–{clock(b.end)}</span>}
+                      {((b.end - b.start) * PX > 32 || moving) && <span className="tm block">{clock(b.start)}–{clock(b.end)}</span>}
                     </button>
                   </Fragment>
                 )

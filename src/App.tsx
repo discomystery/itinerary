@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import { cx, Mark } from './components/ui'
 import { DetailPane, picked, TopTabs, UndoButton, WhoAmI } from './components/hub'
 import ErrorBoundary from './components/ErrorBoundary'
+import { DropNote } from './components/drag'
 import ItemEditor from './components/ItemEditor'
 import { SampleNote } from './components/sample'
 import { type Tab, useStore } from './store'
@@ -91,6 +92,7 @@ export default function App() {
           <ErrorBoundary key={clockKey} resetKey={`${tab}:${selected}`}>{aside}</ErrorBoundary>
         </div>
         {editing && <ErrorBoundary resetKey={editing}><ItemEditor id={editing} onClose={() => edit(null)} /></ErrorBoundary>}
+        <DropNote />
       </div>
     )
   }
@@ -136,6 +138,7 @@ export default function App() {
       </nav>
 
       {editing && <ErrorBoundary resetKey={editing}><ItemEditor id={editing} onClose={() => edit(null)} /></ErrorBoundary>}
+      <DropNote />
     </div>
   )
 }

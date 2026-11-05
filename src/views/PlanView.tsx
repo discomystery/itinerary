@@ -19,6 +19,8 @@ import { useNow } from '../lib/useNow'
 import { useWeather } from '../lib/weather'
 import { ideas, itemById, useStore, useViewTrip } from '../store'
 import { ScopeSwitch, WhoGoing } from '../components/tracks'
+import { dragProps, previewInsert, startDrag, useDragging } from '../components/drag'
+import { canMove } from '../lib/move'
 import type { Block, Item, TransitMode, Trip } from '../types'
 
 const PX = 1.1 // pixels per minute in the Day view
@@ -105,6 +107,7 @@ export default function PlanView() {
         ) : (
           <DayView trip={trip} day={day} analysis={analysis} onEmpty={setAddAt} onOpen={setOpenBlock} onLeg={setOpenLeg} />
         )}
+        {mode === 'list' && analysis.blocks.length > 1 && <p className="mt-3 text-center text-xs t-sub">Hold a card and drag it to change its time, or onto a day above</p>}
       </div>
 
       {addAt !== null && <AddSheet trip={trip} day={day} at={addAt < 0 ? null : addAt} onClose={() => setAddAt(null)} />}
@@ -121,6 +124,7 @@ function DayStrip({ days, day, setDay, analyses }: {
   setDay: (d: string) => void
   analyses: Record<string, DayAnalysis>
 }) {
+  const { target } = useDragging()
   return (
     <div className="days">
       {days.map((d) => {
@@ -128,7 +132,7 @@ function DayStrip({ days, day, setDay, analyses }: {
         const sev = worstSeverity([...a.issues.values()].flat().filter((i) => i.severity !== 'info'))
         const hard = a.blocks.some((b) => b.locked)
         return (
-          <button key={d} onClick={() => setDay(d)} aria-pressed={d === day} className={cx(hard && 'hardday', !a.blocks.length && 'none')} aria-label={dayLabel(d, 'long')}>
+          <button key={d} onClick={() => setDay(d)} aria-pressed={d === day} className={cx(hard && 'hardday', !a.blocks.length && 'none', target?.kind === 'day' && target.day === d && 'over')} aria-label={dayLabel(d, 'long')} data-drop={d === day ? undefined : 'day'} data-day={d}>
             {dayLabel(d).slice(0, 1)}
             <b>{Number(d.slice(8))}</b>
             <i />
@@ -157,22 +161,35 @@ export function ListView({ trip, day, analysis, unfolded, selected, onToggle, on
 }) {
   const editItem = useStore((s) => s.edit)
   const mapsApp = useStore((s) => s.mapsApp)
+  const { payload, target } = useDragging()
   const blocks = analysis.blocks
   const legByTo = new Map(analysis.legs.map((l) => [l.toId, l]))
   const dl = daylight(day, trip.center.lat, trip.center.lng, trip.timezone)
   const ctx = makeCtx(trip)
+  const here = target?.kind === 'list' && target.day === day && !target.same && payload ? target : null
+  const hereKey = here && JSON.stringify(here)
+  const landing = useMemo(() => (here && payload ? previewInsert(here, payload) : null), [hereKey, payload])
 
   if (!blocks.length) {
     return (
-      <div className="px-4 pt-8 text-center">
-        <p className="text-sm t-sub">Nothing planned for {dayLabel(day, 'long')} yet.</p>
+      <div className={cx('px-4 pt-8 text-center', here && 'droplist')} data-drop="list" data-day={day}>
+        {here ? <DropLine landing={landing} /> : <p className="text-sm t-sub">Nothing planned for {dayLabel(day, 'long')} yet.</p>}
         <button className="btn mt-4" onClick={onAdd}><Plus size={16} /> Add a plan</button>
       </div>
     )
   }
 
-  // Beside a details pane, ring the plan it shows. The ring sits on a wrapper because ticket notches clip the card.
-  const pick = (id: string, card: ReactNode) => (selected == null ? card : <div className={cx('pick', selected === id && 'sel')}>{card}</div>)
+  // Each card sits in a slot: what drags, and (beside a details pane) the ring
+  // round the picked plan. The ring sits on the slot because ticket notches clip the card.
+  const slot = (b: Block, card: ReactNode) => (
+    <div
+      className={cx('slot', selected != null && 'pick', selected === b.id && 'sel', payload?.kind === 'block' && payload.id === b.id && 'lifted')}
+      data-slot={b.id}
+      {...dragProps(canMove(trip, b) ? { kind: 'block', id: b.id } : null)}
+    >
+      {card}
+    </div>
+  )
   const rows: Row[] = []
   blocks.forEach((b, i) => {
     const item = itemById(trip, b.itemId)
@@ -185,8 +202,8 @@ export function ListView({ trip, day, analysis, unfolded, selected, onToggle, on
     rows.push({
       key: b.id,
       t: b.start,
-      node: pick(
-        b.id,
+      node: slot(
+        b,
         <ObjectCard
           item={item}
           block={b}
@@ -226,9 +243,24 @@ export function ListView({ trip, day, analysis, unfolded, selected, onToggle, on
     rows.splice(idx, 0, { key: `mark-${m.label}`, t: m.t, node: <RailMark label={m.label} mode={near?.mode} /> })
   }
 
+  // While a card hovers, a line marks where it would land: just above the next card (and the trip to it).
+  if (here) {
+    const at = here.next ? rows.findIndex((r) => r.key === here.next || r.key === `leg-${here.next}` || r.key === `gap-${here.next}`) : -1
+    rows.splice(at < 0 ? rows.length : at, 0, { key: 'drop', t: 0, node: <DropLine landing={landing} /> })
+  }
+
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-2" data-drop="list" data-day={day}>
       {rows.map((r) => <Fragment key={r.key}>{r.node}</Fragment>)}
+    </div>
+  )
+}
+
+function DropLine({ landing }: { landing: ReturnType<typeof previewInsert> }) {
+  const blocked = landing && 'blocked' in landing
+  return (
+    <div className={cx('dropline', blocked && 'no')} aria-hidden>
+      <span>{!landing ? 'Drop here' : 'blocked' in landing ? landing.blocked : `Drop · ${clock(landing.start)}`}</span>
     </div>
   )
 }
@@ -264,13 +296,12 @@ export function columns(blocks: Block[]): Map<string, { col: number; cols: numbe
   return out
 }
 
-interface Drag {
+interface Resize {
   id: string
-  mode: 'move' | 'resize'
   y0: number
   start: number
   end: number
-  cur: { start: number; end: number }
+  cur: number
 }
 
 function DayView({ trip, day, analysis, onEmpty, onOpen, onLeg }: {
@@ -283,40 +314,43 @@ function DayView({ trip, day, analysis, onEmpty, onOpen, onLeg }: {
 }) {
   const updateBlock = useStore((s) => s.updateBlock)
   const now = useNow()
-  const [drag, setDrag] = useState<Drag | null>(null)
+  const [resize, setResize] = useState<Resize | null>(null)
+  const { payload, target } = useDragging()
   const ref = useRef<HTMLDivElement>(null)
 
-  const blocks = analysis.blocks.map((b) => (drag?.id === b.id ? { ...b, ...drag.cur } : b))
-  const first = Math.min(9 * 60, ...blocks.map((b) => b.start - 60))
-  const last = Math.max(23 * 60, ...blocks.map((b) => b.end))
+  // A plan being dragged shows where it would land; one being stretched, how long it would run.
+  const dragId = payload?.kind === 'block' ? payload.id : null
+  const landing = target?.kind === 'grid' && target.day === day ? target.start : null
+  const blocks = analysis.blocks.map((b) =>
+    resize?.id === b.id ? { ...b, end: resize.cur } : dragId === b.id && landing != null ? { ...b, start: landing, end: landing + b.end - b.start } : b,
+  )
+  const first = Math.min(9 * 60, ...analysis.blocks.map((b) => b.start - 60))
+  const last = Math.max(23 * 60, ...analysis.blocks.map((b) => b.end))
   const t0 = Math.floor(first / 60) * 60
   const t1 = Math.ceil(last / 60) * 60
   const y = (m: number) => (m - t0) * PX
   const dl = daylight(day, trip.center.lat, trip.center.lng, trip.timezone)
   const cols = columns(blocks)
-  const dragItem = drag ? itemById(trip, analysis.blocks.find((b) => b.id === drag.id)!.itemId) : undefined
+  const activeId = resize?.id ?? (landing != null ? dragId : null)
+  const dragItem = activeId ? itemById(trip, analysis.blocks.find((b) => b.id === activeId)?.itemId ?? '') : undefined
   const dragSpans = dragItem ? openSpans(dragItem.hours, day) : null
   const legByTo = new Map(analysis.legs.map((l) => [l.toId, l]))
 
-  const begin = (e: React.PointerEvent, b: Block, mode: Drag['mode']) => {
+  const beginResize = (e: React.PointerEvent, b: Block) => {
     e.stopPropagation()
     e.preventDefault()
     ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
-    setDrag({ id: b.id, mode, y0: e.clientY, start: b.start, end: b.end, cur: { start: b.start, end: b.end } })
+    setResize({ id: b.id, y0: e.clientY, start: b.start, end: b.end, cur: b.end })
   }
-  const move = (e: React.PointerEvent) => {
-    if (!drag) return
-    const dm = snap((e.clientY - drag.y0) / PX)
-    const cur =
-      drag.mode === 'move'
-        ? { start: drag.start + dm, end: drag.end + dm }
-        : { start: drag.start, end: Math.max(drag.start + 15, drag.end + dm) }
-    if (cur.start !== drag.cur.start || cur.end !== drag.cur.end) setDrag({ ...drag, cur })
+  const moveResize = (e: React.PointerEvent) => {
+    if (!resize) return
+    const cur = Math.max(resize.start + 15, resize.end + snap((e.clientY - resize.y0) / PX))
+    if (cur !== resize.cur) setResize({ ...resize, cur })
   }
-  const end = () => {
-    if (!drag) return
-    if (drag.cur.start !== drag.start || drag.cur.end !== drag.end) updateBlock(drag.id, drag.cur)
-    setDrag(null)
+  const endResize = () => {
+    if (!resize) return
+    if (resize.cur !== resize.end) updateBlock(resize.id, { end: resize.cur })
+    setResize(null)
   }
   const colStyle = (id: string) => {
     const { col, cols: n } = cols.get(id) ?? { col: 0, cols: 1 }
@@ -332,11 +366,15 @@ function DayView({ trip, day, analysis, onEmpty, onOpen, onLeg }: {
         ref={ref}
         className="cal chrome overflow-hidden rounded-[10px] border b-line"
         style={{ height: (t1 - t0) * PX }}
-        onPointerMove={move}
-        onPointerUp={end}
-        onPointerCancel={end}
+        data-drop="grid"
+        data-day={day}
+        data-t0={t0}
+        data-px={PX}
+        onPointerMove={moveResize}
+        onPointerUp={endResize}
+        onPointerCancel={endResize}
         onClick={(e) => {
-          if (drag) return
+          if (resize) return
           const rect = ref.current!.getBoundingClientRect()
           onEmpty(snap((e.clientY - rect.top) / PX + t0, 30))
         }}
@@ -369,9 +407,11 @@ function DayView({ trip, day, analysis, onEmpty, onOpen, onLeg }: {
           const sev = worstSeverity(analysis.issues.get(b.id)?.filter((i) => i.severity !== 'info'))
           const Glyph = glyphFor(item)
           const pos = colStyle(b.id)
+          const moving = activeId === b.id
+          const movable = canMove(trip, b)
           return (
             <Fragment key={b.id}>
-              {leg && leg.minutes > 0 && (
+              {leg && leg.minutes > 0 && !moving && (
                 <div
                   className={cx('tv', leg.tight && 'tight')}
                   style={{ ...pos, ...railVars(leg.mode), top: y(b.start - leg.minutes), height: Math.max(12, leg.minutes * PX) }}
@@ -388,15 +428,17 @@ function DayView({ trip, day, analysis, onEmpty, onOpen, onLeg }: {
                 </div>
               )}
               <div
-                className={cx('ce', objectKind(item), sev === 'error' && 'err', sev === 'warn' && 'warn', drag?.id === b.id && 'dragging')}
+                className={cx('ce', objectKind(item), sev === 'error' && 'err', sev === 'warn' && 'warn', moving && 'dragging', dragId === b.id && !moving && 'lifted')}
                 style={{ ...pos, top: y(b.start), height: Math.max(22, (b.end - b.start) * PX - 2) }}
+                data-card
+                {...dragProps(movable ? { kind: 'block', id: b.id } : null)}
                 onClick={(e) => {
                   e.stopPropagation()
                   onOpen(b.id)
                 }}
               >
                 {item.anchors.map((a) => {
-                  const t = anchorOnDay(a, day, trip.timezone)
+                  const t = anchorOnDay(a, day, trip.timezone) + (b.start - (analysis.blocks.find((x) => x.id === b.id)?.start ?? b.start))
                   if (t < b.start || t > b.end) return null
                   return (
                     <div key={a.id} className={cx('anchor', !a.hard && 'soft')} style={{ top: (t - b.start) * PX }}>
@@ -408,13 +450,13 @@ function DayView({ trip, day, analysis, onEmpty, onOpen, onLeg }: {
                   {b.locked ? <Lock /> : sev ? <TriangleAlert style={{ color: sev === 'error' ? '#c8102e' : '#b45309' }} /> : <Glyph />}
                   {item.title}
                 </div>
-                {(b.end - b.start) * PX > 34 && <div className="tm">{clock(b.start)}–{clock(b.end)}</div>}
-                {!b.locked && (
+                {((b.end - b.start) * PX > 34 || moving) && <div className="tm">{clock(b.start)}–{clock(b.end)}</div>}
+                {movable && (
                   <>
-                    <div className="grip" onPointerDown={(e) => begin(e, b, 'move')} onClick={(e) => e.stopPropagation()} title="Drag to move">
+                    <div className="grip" onPointerDown={(e) => startDrag(e, { kind: 'block', id: b.id }, { handle: true })} onClick={(e) => e.stopPropagation()} title="Drag to move">
                       <GripVertical />
                     </div>
-                    <div className="resize" onPointerDown={(e) => begin(e, b, 'resize')} onClick={(e) => e.stopPropagation()} title="Drag to resize" />
+                    <div className="resize" onPointerDown={(e) => beginResize(e, b)} onClick={(e) => e.stopPropagation()} title="Drag to resize" />
                   </>
                 )}
               </div>
@@ -422,7 +464,7 @@ function DayView({ trip, day, analysis, onEmpty, onOpen, onLeg }: {
           )
         })}
       </div>
-      <p className="mt-2 text-center text-xs t-sub">Tap empty time to add · drag the grip to move</p>
+      <p className="mt-2 text-center text-xs t-sub">Tap empty time to add · drag a plan to move it, or onto a day above</p>
     </div>
   )
 }

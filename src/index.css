@@ -716,7 +716,6 @@ button.o:active { transform: scale(0.99); }
 @media (hover: hover) { .bstrip:hover { border-color: var(--act); color: var(--act); } }
 .pick { border-radius: calc(var(--r) + 3px); }
 .pick.sel { outline: 2px solid var(--act); outline-offset: 3px; }
-.pick[draggable='true'] { cursor: grab; }
 
 /* Week: the same plans on a time grid, one column per day. */
 .week { flex: 1; min-height: 0; overflow: auto; padding: 0 24px 24px; }
@@ -942,3 +941,27 @@ details.more[open] > summary svg { transform: none; }
 .tswatch { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; color: #fff; flex: none; }
 .tswatch svg { width: 15px; height: 15px; }
 .seg3.scope button { display: grid; place-items: center; }
+
+/* Dragging cards: a finger holds a card to lift it, a mouse just drags. */
+[data-drag] { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+@media (hover: hover) { [data-drag] { cursor: grab; } }
+.is-dragging, .is-dragging * { cursor: grabbing !important; -webkit-user-select: none; user-select: none; }
+.slot.lifted, .ce.lifted { opacity: 0.32; filter: grayscale(0.4); }
+.drag-ghost { position: fixed !important; z-index: 1000; pointer-events: none; margin: 0; opacity: 0.96; transition: opacity 0.12s; will-change: transform; box-shadow: 0 18px 32px -14px rgb(0 0 0 / 0.55), 0 4px 10px -4px rgb(0 0 0 / 0.3); border-radius: var(--r); }
+.drag-ghost.sel { outline: none; }
+.ce.dragging { transition: none; }
+.dropline { position: relative; height: 0; margin: 2px 0; border-top: 2.5px solid var(--act); border-radius: 2px; }
+.dropline::before { content: ''; position: absolute; left: -4px; top: -6.5px; width: 10px; height: 10px; border-radius: 50%; background: var(--act); }
+.dropline span { position: absolute; right: 0; top: -11px; padding: 3px 7px; border-radius: 99px; background: var(--act); color: var(--chrome); font: 600 11px/1 var(--mono); white-space: nowrap; }
+.dropline.no { border-top-style: dashed; border-color: var(--sub); }
+.dropline.no::before, .dropline.no span { background: var(--sub); }
+.droplist { box-shadow: inset 0 0 0 2px var(--act); border-radius: 14px; padding-bottom: 16px; }
+.days button.over b { background: var(--act); color: var(--chrome); transform: scale(1.15); }
+.days button b { transition: transform 0.12s, background 0.12s; }
+.dropnote { position: fixed; z-index: 900; left: 50%; width: max-content; bottom: calc(76px + env(safe-area-inset-bottom)); transform: translateX(-50%); display: flex; align-items: center; gap: 12px; max-width: calc(100vw - 32px); padding: 8px 8px 8px 14px; border-radius: 12px; border: 1px solid var(--line); box-shadow: 0 10px 28px -12px rgb(0 0 0 / 0.45); font-size: 13px; animation: noteIn 0.18s ease-out; }
+.dropnote span { min-width: 0; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-height: 1.3; }
+.dropnote button { flex: none; display: flex; align-items: center; gap: 4px; padding: 6px 10px; border-radius: 8px; background: none; border: 0; color: var(--act); font-weight: 600; cursor: pointer; }
+.dropnote button svg { width: 15px; height: 15px; }
+.hub .dropnote { bottom: 24px; }
+@keyframes noteIn { from { opacity: 0; transform: translate(-50%, 8px); } }
+@media (prefers-reduced-motion: reduce) { .dropnote { animation: none; } }
