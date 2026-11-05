@@ -1,11 +1,12 @@
-import { Lock, LockOpen, Minus, Plus, X } from 'lucide-react'
+import { ChevronDown, Lock, LockOpen, Minus, Plus, X } from 'lucide-react'
 import { KINDS, cardKind } from '../lib/cards'
 import { isFlight } from '../lib/flights'
-import { dayLabel, fmtDuration, parseHHMM, toHHMM } from '../lib/time'
-import { canSpan, isMultiDay, lengthOf, moveEnd, moveStart, norm, settle, type When } from '../lib/when'
+import { dayLabel, fmtDuration } from '../lib/time'
+import { canSpan, earlyMoments, labelsFor, isMultiDay, lengthOf, moveEnd, moveStart, norm, shiftAll, type When } from '../lib/when'
 import { uid } from '../store'
 import type { Item } from '../types'
 import { clock } from './objects'
+import { ClockToggle, TimeField } from './TimeField'
 import { cx } from './ui'
 
 // The one place you say when something happens. The same control sits in the card
@@ -34,11 +35,12 @@ export function WhenFields({ item, w, tz, days, scheduled, onChange, addToPlan, 
   const rows = w.set || scheduled
   const len = lengthOf(w)
   const summary = !rows ? `about ${fmtDuration(w.takes)}` : w.allDay || multi ? dayCount(w) : fmtDuration(len)
-  const shift = (m: number) => onChange(moveStart(w, norm(w.day, w.start + m).day, norm(w.day, w.start + m).min))
+  const shift = (m: number) => onChange(shiftAll(w, m))
+  const timed = rows && !w.allDay
 
   return (
     <div className="pn whenpn">
-      <div className="sl" style={{ margin: '0 0 8px' }}><span>When</span><span>{summary}</span></div>
+      <div className="sl whead" style={{ margin: '0 0 8px' }}><span>When</span><span className="flex items-center gap-2">{summary}{timed && <ClockToggle />}</span></div>
 
       {!flight && (
         <>
@@ -79,11 +81,11 @@ export function WhenFields({ item, w, tz, days, scheduled, onChange, addToPlan, 
           {!flight && (
             <div className="nudge">
               {!w.allDay && (
-                <span className="stp2">
-                  <button onClick={() => shift(-60)} aria-label="An hour earlier">−1h</button>
-                  <button onClick={() => shift(-15)} aria-label="15 minutes earlier">−15</button>
-                  <button onClick={() => shift(15)} aria-label="15 minutes later">+15</button>
-                  <button onClick={() => shift(60)} aria-label="An hour later">+1h</button>
+                <span className="stp2" role="group" aria-label="Move everything" title="Moves the start, the end and the other times together">
+                  <button onClick={() => shift(-60)} aria-label="Move it all an hour earlier">−1h</button>
+                  <button onClick={() => shift(-15)} aria-label="Move it all 15 minutes earlier">−15</button>
+                  <button onClick={() => shift(15)} aria-label="Move it all 15 minutes later">+15</button>
+                  <button onClick={() => shift(60)} aria-label="Move it all an hour later">+1h</button>
                 </span>
               )}
               {w.set && canSpan(item) && (
@@ -107,7 +109,7 @@ export function WhenFields({ item, w, tz, days, scheduled, onChange, addToPlan, 
         </>
       )}
 
-      {w.set && !w.allDay && !flight && <Moments item={item} w={w} days={days} onChange={(x) => onChange(settle(x, tz))} />}
+      {w.set && !w.allDay && !flight && <Moments item={item} w={w} tz={tz} days={days} onChange={onChange} />}
 
       {onAddToPlan && !scheduled && w.set && !w.allDay && !multi && (
         <label className="addplan">
@@ -141,30 +143,25 @@ function Row({ cap, days, day, time, disabled, onDay, onTime }: {
       <small>{cap}</small>
       <label className="wf">
         <b>{short(day)}</b>
+        <ChevronDown className="wfc" aria-hidden="true" />
         <select value={day} disabled={disabled} onChange={(e) => onDay(e.target.value)} aria-label={`${cap} day`}>
           {[...new Set([...days, day])].sort().map((d) => <option key={d} value={d}>{dayLabel(d)}</option>)}
         </select>
       </label>
-      {time != null && (
-        <label className="wf">
-          <b>{clock(time)}</b>
-          <input type="time" value={toHHMM(time)} disabled={disabled} aria-label={`${cap} time`} onChange={(e) => {
-            const t = parseHHMM(e.target.value)
-            if (t != null) onTime(t)
-          }} />
-        </label>
-      )}
+      {time != null && <TimeField value={time} disabled={disabled} label={cap} onChange={onTime} />}
     </div>
   )
 }
 
 /** Extra times printed on the card: Doors, Boarding, Last entry… */
-function Moments({ item, w, days, onChange }: { item: Item; w: When; days: string[]; onChange: (w: When) => void }) {
+function Moments({ item, w, tz, days, onChange }: { item: Item; w: When; tz: string; days: string[]; onChange: (w: When) => void }) {
   const presets = KINDS[cardKind(item)].times ?? []
   const used = (p: string) => w.moments.some((a) => a.label.startsWith(p))
-  const next = presets.find((p) => p !== w.main?.label && !used(p))
+  // Not the start itself: that's the Starts row above.
+  const next = presets.find((p) => p !== w.main?.label && p !== labelsFor(item).start && !used(p))
   const upd = (id: string, p: Partial<When['moments'][number]>) => onChange({ ...w, moments: w.moments.map((a) => (a.id === id ? { ...a, ...p } : a)) })
   const multi = w.endDay > w.day
+  const early = earlyMoments(w, tz)[0]
   return (
     <div className="moments">
       <div className="sl"><span>Also on the card</span></div>
@@ -176,16 +173,18 @@ function Moments({ item, w, days, onChange }: { item: Item; w: When; days: strin
               {[...new Set([...days, a.day])].sort().map((d) => <option key={d} value={d}>{short(d)}</option>)}
             </select>
           )}
-          <input type="time" className="input w-auto py-1" value={toHHMM(a.time)} onChange={(e) => {
-            const t = parseHHMM(e.target.value)
-            if (t != null) upd(a.id, { time: t })
-          }} aria-label={`${a.label} time`} />
+          <TimeField value={a.time} label={a.label || 'Other'} onChange={(t) => upd(a.id, { time: t })} />
           <button className="lockb" aria-pressed={a.hard} onClick={() => upd(a.id, { hard: !a.hard })} title={a.hard ? "Can't miss it: flagged if the plan runs late" : 'Nice to know'} aria-label={a.hard ? `${a.label}: can't miss. Make it soft` : `${a.label}: soft. Make it a must`}>
             {a.hard ? <Lock /> : <LockOpen />}
           </button>
           <button className="btn-ghost px-1.5" onClick={() => onChange({ ...w, moments: w.moments.filter((x) => x.id !== a.id) })} aria-label={`Remove ${a.label}`}><X size={15} /></button>
         </div>
       ))}
+      {early && (
+        <p className="wh">
+          {early.a.label || 'The first time'} is before it starts, so the plan has you there from {clock(early.min)}.
+        </p>
+      )}
       <button
         className="btn-soft mt-1.5 py-1 text-xs"
         onClick={() => {

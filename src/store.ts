@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { blankTrip } from './data/blank'
 import { helsinkiTrip } from './data/helsinki'
-import { deviceTimeZone, isTimeZone } from './lib/time'
+import { deviceTimeZone, isTimeZone, setHour24 } from './lib/time'
 import { defaultMapsApp, type MapsApp } from './lib/transit'
 import { useMemo } from 'react'
 import { forPerson, hasSplits, TRACK_COLORS, tracksOf, withoutTrack, withTrack } from './lib/tracks'
@@ -36,6 +36,8 @@ interface State {
   cleared: boolean
   /** Show the whole group's plans instead of just the viewer's itinerary. This device only. */
   everyone: boolean
+  /** Show and type times on a 24 hour clock. This device only. */
+  hour24: boolean
 
   setTab: (t: Tab) => void
   setDay: (d: string) => void
@@ -46,6 +48,7 @@ interface State {
   select: (id: Id | null) => void
   setMapsApp: (a: MapsApp) => void
   setEveryone: (on: boolean) => void
+  setHour24: (on: boolean) => void
 
   mutate: (fn: (t: Trip) => Trip) => void
   undo: () => void
@@ -111,6 +114,7 @@ export const useStore = create<State>()(
         sampleDismissed: false,
         cleared: false,
         everyone: false,
+        hour24: false,
 
         setTab: (tab) => set({ tab }),
         setDay: (day) => set({ day }),
@@ -121,6 +125,10 @@ export const useStore = create<State>()(
         select: (selected) => set({ selected }),
         setMapsApp: (mapsApp) => set({ mapsApp }),
         setEveryone: (everyone) => set({ everyone }),
+        setHour24: (hour24) => {
+          setHour24(hour24)
+          set({ hour24 })
+        },
 
         mutate,
         undo: () =>
@@ -268,7 +276,7 @@ export const useStore = create<State>()(
         }
         return state as State
       },
-      partialize: (s) => ({ trip: s.trip, viewer: s.viewer, organizer: s.organizer, everyone: s.everyone, day: s.day, tab: s.tab, simNow: s.simNow, mapsApp: s.mapsApp, sampleDismissed: s.sampleDismissed }),
+      partialize: (s) => ({ trip: s.trip, viewer: s.viewer, organizer: s.organizer, everyone: s.everyone, day: s.day, tab: s.tab, simNow: s.simNow, mapsApp: s.mapsApp, sampleDismissed: s.sampleDismissed, hour24: s.hour24 }),
     },
   ),
 )

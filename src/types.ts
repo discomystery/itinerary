@@ -78,6 +78,11 @@ export interface Item extends Audience {
   hours?: string
   hoursSource?: HoursSource
   anchors: Anchor[]
+  /**
+   * Which of the anchors is the official start (the show, not its doors). Times
+   * before it are still on the card and the plan; they just don't become the start.
+   */
+  startsAt?: Id
   /** Whole days with no times: runs from its first anchor's day to its last's. */
   allDay?: boolean
   duration: Duration

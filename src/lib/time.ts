@@ -1,14 +1,35 @@
 // Wall-clock helpers. We deliberately avoid real Date math for schedule
 // positions: a block is (day, minutes) in the trip timezone, full stop.
 
+// 12 or 24 hour clock, for every time the app prints. Set from the device's
+// setting in the store; plain module state so the formatters stay plain functions.
+let hour24 = false
+export const setHour24 = (on: boolean) => { hour24 = on }
+export const isHour24 = () => hour24
+
+const wrap = (min: number) => ((Math.round(min) % 1440) + 1440) % 1440
+
+/** Short clock time: "7p", "7:30p", or "19:00", "19:30" on a 24 hour clock. */
 export function fmtTime(min: number): string {
-  const m = ((Math.round(min) % 1440) + 1440) % 1440
+  const m = wrap(min)
   const h = Math.floor(m / 60)
   const mm = m % 60
+  if (hour24) return `${String(h).padStart(2, '0')}:${String(mm).padStart(2, '0')}`
   const suffix = h < 12 ? 'a' : 'p'
   const h12 = h % 12 === 0 ? 12 : h % 12
   return mm === 0 ? `${h12}${suffix}` : `${h12}:${String(mm).padStart(2, '0')}${suffix}`
 }
+
+/** A clock time that always shows minutes: "7:00p", or "19:00" on a 24 hour clock. */
+export function fmtClock(min: number): string {
+  const m = wrap(min)
+  const h = Math.floor(m / 60)
+  const mm = String(m % 60).padStart(2, '0')
+  return hour24 ? `${String(h).padStart(2, '0')}:${mm}` : `${h % 12 || 12}:${mm}${h < 12 ? 'a' : 'p'}`
+}
+
+/** The clock time without its a/p, for the first half of a range like "7:00–9:30p". */
+export const clockBare = (min: number) => fmtClock(min).replace(/[ap]$/, '')
 
 export function fmtDuration(min: number): string {
   const m = Math.round(min)

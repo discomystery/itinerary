@@ -38,7 +38,7 @@ import { cardKind, coveredByPass, det, spanOf, variantOf } from '../lib/cards'
 import { isFlight, layovers, via } from '../lib/flights'
 import { hoursSummary, openSpans } from '../lib/hours'
 import { anchorInTrip, anchorOnDay, type Issue, worstSeverity } from '../lib/schedule'
-import { dayLabel, dayRange, fmtDuration } from '../lib/time'
+import { clockBare, dayLabel, dayRange, fmtClock, fmtDuration, isHour24 } from '../lib/time'
 import { distanceMeters } from '../lib/transit'
 import { uid, useStore } from '../store'
 import type { Block, CardKind, FlightLeg, Item, Person, Trip } from '../types'
@@ -94,15 +94,12 @@ export function glyphFor(i: Item): LucideIcon {
 }
 
 /** A short clock time that always shows minutes: 7:00p, 12:30a. */
-export function clock(min: number): string {
-  const m = ((Math.round(min) % 1440) + 1440) % 1440
-  const h = Math.floor(m / 60)
-  return `${h % 12 || 12}:${String(m % 60).padStart(2, '0')}${h < 12 ? 'a' : 'p'}`
-}
+export const clock = fmtClock
 
 /** A clock time with the a/p printed small, the way timetables do. */
 export function Clock({ m }: { m: number }) {
   const s = clock(m)
+  if (!/[ap]$/.test(s)) return <>{s}</>
   return (
     <>
       {s.slice(0, -1)}
@@ -114,6 +111,7 @@ export function Clock({ m }: { m: number }) {
 /** "10–8": an opening span the way a postmark would print it. */
 const shortHour = (m: number) => {
   const s = clock(m)
+  if (isHour24()) return s.endsWith(':00') ? s.slice(0, -3) : s
   return s.endsWith(':00a') || s.endsWith(':00p') ? s.slice(0, -4) : s.slice(0, -1)
 }
 
@@ -228,7 +226,7 @@ export interface ObjectProps {
 
 /** When this block runs, or the item's own first time when it isn't scheduled. */
 function whenOf(item: Item, block: Block | undefined, tz: string | undefined, label?: string) {
-  const a = (label ? item.anchors.find((x) => x.label.startsWith(label)) : undefined) ?? item.anchors.find((x) => x.hard) ?? item.anchors[0]
+  const a = (label ? item.anchors.find((x) => x.label.startsWith(label)) : undefined) ?? item.anchors.find((x) => x.id === item.startsAt) ?? item.anchors.find((x) => x.hard) ?? item.anchors[0]
   if (a && tz) return { t: anchorOnDay(a, block?.day ?? anchorInTrip(a, tz).day, tz), hard: a.hard, label: a.label }
   if (block) return { t: block.start, hard: false, label: undefined }
   return null
@@ -504,7 +502,7 @@ function panels(item: Item, trip: Trip, block: Block | undefined, day: string | 
       const n = d('tickets')
       if (v === 'timed') {
         const ts = item.anchors.map((a) => anchorOnDay(a, theDay ?? a.day, tz)).sort((a, b) => a - b)
-        const win = ts.length > 1 ? `${clock(ts[0]).slice(0, -1)}–${clock(ts[1])}` : ts.length ? clock(ts[0]) : undefined
+        const win = ts.length > 1 ? `${clockBare(ts[0])}–${clock(ts[1])}` : ts.length ? clock(ts[0]) : undefined
         return {
           pb: (<>
             <div className="band"><span>TIMED ENTRY</span><span>{n ? `${n} TICKETS` : ''}</span></div>
