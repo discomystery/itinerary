@@ -217,6 +217,9 @@ export function runningLate(trip: Trip, day: string, now: number, delay: number)
 
 /** Replace a day's blocks in a trip, returning the new block list. */
 export function applyDay(trip: Trip, day: string, blocks: Block[], dropped: string[]): Block[] {
-  const keep = trip.blocks.filter((b) => b.day !== day)
+  // Replace by id, so plans on this day that weren't part of the fix (another
+  // track's, when you're looking at your own itinerary) stay as they are.
+  const touched = new Set([...blocks.map((b) => b.id), ...dropped])
+  const keep = trip.blocks.filter((b) => b.day !== day || !touched.has(b.id))
   return [...keep, ...blocks.filter((b) => !dropped.includes(b.id))]
 }

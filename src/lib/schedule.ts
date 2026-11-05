@@ -5,6 +5,7 @@ import { isStale, type Route, type RouteRequest, routable, routeKey } from './ro
 import { distanceMeters, suggestMode, travelMinutes } from './transit'
 import { endLocation, flightIssues, flightSpan, isFlight } from './flights'
 import { fmtTime, utcToWall, wallToUtc } from './time'
+import { audience, sharePeople } from './tracks'
 
 export const INTEREST_SCORE: Record<Interest, number> = { must: 3, yes: 1, meh: 0, no: -2 }
 
@@ -108,9 +109,15 @@ export function hardBy(ctx: Ctx, b: Block): number {
   return times.length ? Math.min(...times) : b.start
 }
 
-/** The closest earlier block that has a location (notes don't break legs). */
+/**
+ * The closest earlier block with a location (notes don't break legs) that
+ * someone on this block is also on: when the group splits up, each track's
+ * travel runs between its own plans.
+ */
 function prevLocated(ctx: Ctx, sorted: Block[], idx: number): Block | undefined {
-  for (let i = idx - 1; i >= 0; i--) if (ctx.loc(sorted[i])) return sorted[i]
+  const b = sorted[idx]
+  const mine = people(ctx, b)
+  for (let i = idx - 1; i >= 0; i--) if (ctx.loc(sorted[i]) && sharePeople(people(ctx, sorted[i]), mine)) return sorted[i]
   return undefined
 }
 
@@ -145,9 +152,11 @@ export interface DayAnalysis {
   missing: RouteRequest[]
 }
 
-function sharesPeople(a: Block, b: Block): boolean {
-  if (!a.who?.length || !b.who?.length) return true
-  return a.who.some((p) => b.who!.includes(p))
+/** Who's on a block: its own people or track, else its card's. Null is everyone. */
+const people = (ctx: Ctx, b: Block) => audience(ctx.trip, ctx.item(b.itemId), b)
+
+function sharesPeople(ctx: Ctx, a: Block, b: Block): boolean {
+  return sharePeople(people(ctx, a), people(ctx, b))
 }
 
 export function analyzeDay(trip: Trip, day: string, ctx: Ctx = makeCtx(trip)): DayAnalysis {
@@ -191,9 +200,13 @@ export function analyzeDay(trip: Trip, day: string, ctx: Ctx = makeCtx(trip)): D
 
     for (let j = 0; j < i; j++) {
       const o = blocks[j]
-      if (o.end > b.start && sharesPeople(o, b)) {
+      if (o.end > b.start && sharesPeople(ctx, o, b)) {
         const other = ctx.item(o.itemId)?.title ?? 'another plan'
-        add(b.id, { kind: 'overlap', severity: 'error', message: `Overlaps ${other}` })
+        // When only some of the group clash, say who.
+        const mine = people(ctx, b)
+        const both = people(ctx, o)?.filter((p) => !mine || mine.includes(p))
+        const who = both && trip.people.filter((p) => both.includes(p.id)).map((p) => p.name).join(', ')
+        add(b.id, { kind: 'overlap', severity: 'error', message: `Overlaps ${other}${who ? ` (${who})` : ''}` })
       }
     }
 

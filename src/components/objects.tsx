@@ -43,6 +43,7 @@ import { distanceMeters } from '../lib/transit'
 import { uid, useStore } from '../store'
 import type { Block, CardKind, FlightLeg, Item, Person, Trip } from '../types'
 import { cx, Votes } from './ui'
+import { AudienceTag } from './tracks'
 
 // Every plan is drawn as the real-world object it stands for. Folded, they all
 // share one skeleton, [body | signature], so they stack and tile cleanly.
@@ -332,12 +333,13 @@ export function ObjectCard({ item, size = 'm', block, day, tz, people, issues, e
         <div className="eb">
           {sev ? <TriangleAlert style={{ color: sev === 'error' ? '#c8102e' : '#b45309' }} /> : <Glyph />}
           <span>{eb}</span>
+          {size !== 't' && <AudienceTag trip={trip} item={item} block={block} />}
         </div>
         <div className="tt">{item.title}</div>
         {dark && item.prefersDaylight && <div className="mt warnline"><Sun />{dark.message}</div>}
         {!dark && dt && <div className="mt">{dt}</div>}
         {children}
-        {size === 't' && people && <div className="mt-auto pt-1"><Votes item={item} people={people} block={block} /></div>}
+        {size === 't' && people && <div className="mt-auto pt-1"><Votes item={item} people={people} block={block} trip={trip} /></div>}
       </div>
       <div className="s">
         {sig ?? <Signature item={item} block={block} tz={tz} day={theDay} covered={covered} />}
@@ -492,7 +494,7 @@ function panels(item: Item, trip: Trip, block: Block | undefined, day: string | 
   const v = variantOf(item)
   const tz = trip.timezone
   const d = (id: string) => det(item, id)
-  const votes = <Votes item={item} people={trip.people} block={block} />
+  const votes = <Votes item={item} people={trip.people} block={block} trip={trip} />
   const span = spanOf(item, tz)
   const firstDay = item.anchors[0] ? anchorInTrip(item.anchors[0], tz).day : undefined
   const theDay = day ?? block?.day ?? firstDay

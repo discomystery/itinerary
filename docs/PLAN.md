@@ -166,10 +166,26 @@ The app is **Papermap**: old-school travel paper is the design language.
   trams and buses do; VR commuter trains currently show as scheduled). Live
   departures aren't cached; the Plan keeps using timetable routes.
 
+## Tracks (v1.7)
+
+- **Tracks** are named groups of people (Trip → Tracks), e.g. "Raleigh crew"
+  and "Seattle crew" when people fly in on different days.
+- **Any card can be for a track, a few people, or everyone** ("Who's this for"
+  in the editor, "Who's going" under a plan). A card planned more than once
+  (two games) sets each time on its own. Cards for part of the group wear a
+  small tag in their top line.
+- **Each person sees their own itinerary.** Viewing as someone, Plan, Board,
+  Map, Ribbons, print and the calendar export show only their plans; a Mine /
+  Everyone switch shows the whole group. Now always shows your own.
+- Travel legs run between plans the same people are on, overlaps are only
+  flagged when someone is on both (and say who), and costs split between a
+  plan's people. Trip → People shows when each person lands and leaves, from
+  their flights.
+
 ## Next (v2 candidates)
 
 1. **Real-time sync + accounts** (Supabase): each person votes as themselves; activity feed.
-2. **Group splits**: blocks already have `who?: Id[]`; add per-person lanes and meet-up points.
+2. **Group splits, part 2**: per-track lanes on the board and meet-up points where tracks rejoin.
 3. **Smart fill**: "we have 3 free hours, suggest a cluster of nearby must-dos."
 4. **Offline** service worker (tiles + data) for spotty roaming.
 5. Attachments for tickets/confirmations; expense split; import Google Maps lists.

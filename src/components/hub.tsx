@@ -8,7 +8,7 @@ import { useRoutes } from '../lib/routeCache'
 import { analyzeDay, anchoredSlot, findSlot, type Leg, makeCtx } from '../lib/schedule'
 import { dayLabel } from '../lib/time'
 import { directionsUrl } from '../lib/transit'
-import { itemById, type Tab, useStore } from '../store'
+import { itemById, type Tab, useStore, useViewTrip } from '../store'
 import type { Trip } from '../types'
 import { BlockDetail } from '../views/PlanView'
 
@@ -90,7 +90,7 @@ export function picked(trip: Trip, selected: string | null) {
 
 /** The picked card unfolded, big, on its own bit of desk, with what you can do with it below. */
 export function DetailPane() {
-  const trip = useStore((s) => s.trip)
+  const trip = useViewTrip()
   const day = useStore((s) => s.day)
   const selected = useStore((s) => s.selected)
   const mapsApp = useStore((s) => s.mapsApp)

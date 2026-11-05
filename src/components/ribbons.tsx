@@ -1,13 +1,13 @@
 import { Pencil } from 'lucide-react'
 import { useState } from 'react'
 import { cardKind, ribbonsFor } from '../lib/cards'
-import { useStore } from '../store'
+import { useStore, useViewTrip } from '../store'
 import { clock, glyphFor, ObjectCard } from './objects'
 import { cx } from './ui'
 
 /** Stays, rentals and passes still running today, as slim strips. Tap one to unfold its card. */
 export function Ribbons({ day }: { day: string }) {
-  const trip = useStore((s) => s.trip)
+  const trip = useViewTrip()
   const edit = useStore((s) => s.edit)
   const [open, setOpen] = useState<string | null>(null)
   const list = ribbonsFor(trip, day, clock)

@@ -18,7 +18,7 @@ import { directionsUrl, distanceMeters, fmtDistance, suggestMode, travelMinutes 
 import { flightStatus, isFlight } from '../lib/flights'
 import { useNow } from '../lib/useNow'
 import { useWeather } from '../lib/weather'
-import { ideas, itemById, useStore } from '../store'
+import { ideas, itemById, useStore, useViewTrip } from '../store'
 import type { Block, Item, LatLng } from '../types'
 
 /** "Now · 2h left", or for a flight, which leg you're on or how long the layover has left. */
@@ -32,7 +32,7 @@ function nowEyebrow(item: Item, left: number, utc: number, tz: string): string {
 }
 
 export default function NowView() {
-  const trip = useStore((s) => s.trip)
+  const trip = useViewTrip(true)
   const setTab = useStore((s) => s.setTab)
   const setDay = useStore((s) => s.setDay)
   const mapsApp = useStore((s) => s.mapsApp)
@@ -159,7 +159,7 @@ export default function NowView() {
 
 /** With no fixed time left today, the stub counts down to sunset instead. */
 function DuskStub({ day, now }: { day: string; now: number }) {
-  const trip = useStore((s) => s.trip)
+  const trip = useViewTrip(true)
   const dl = daylight(day, trip.center.lat, trip.center.lng, trip.timezone)
   const before = dl && now < dl.sunset
   return (
@@ -173,7 +173,7 @@ function DuskStub({ day, now }: { day: string; now: number }) {
 
 /** Travel still ahead today, printed like a fare card. */
 function TransitStub({ legs }: { legs: Leg[] }) {
-  const trip = useStore((s) => s.trip)
+  const trip = useViewTrip(true)
   const mode = trip.defaultMode
   const M = MODE_STYLE[mode]
   const mins = legs.reduce((a, l) => a + l.minutes, 0)
@@ -191,14 +191,14 @@ function TransitStub({ legs }: { legs: Leg[] }) {
 
 /** The leg to the next plan, flagged if it's already time to go. */
 function LateAwareLeg({ leg, now, onOpen }: { leg: Leg; now: number; onOpen: () => void }) {
-  const trip = useStore((s) => s.trip)
+  const trip = useViewTrip(true)
   const leave = leaveAt(trip, leg)
   if (leave > now) return <LegPill trip={trip} leg={leg} onOpen={onOpen} />
   return <LegPill trip={trip} leg={{ ...leg, tight: true }} late={now - leave} onOpen={onOpen} />
 }
 
 function SimControl({ inTrip }: { inTrip: boolean }) {
-  const trip = useStore((s) => s.trip)
+  const trip = useViewTrip(true)
   const simNow = useStore((s) => s.simNow)
   const setSimNow = useStore((s) => s.setSimNow)
   const now = useNow()
@@ -250,15 +250,16 @@ function RunningLate({ day, now, initial, leave, arriveBy, deps, onClose }: {
   deps: Departure[] | null
   onClose: () => void
 }) {
-  const trip = useStore((s) => s.trip)
+  const trip = useViewTrip(true)
   const setBlocks = useStore((s) => s.setBlocks)
+  const full = useStore((s) => s.trip)
   const [delay, setDelay] = useState<number>(initial)
   const [done, setDone] = useState<string | null>(null)
   const result: LateResult | null = useMemo(() => (done ? null : runningLate(trip, day, now, delay)), [trip, day, now, delay, done])
   const title = (id: string) => itemById(trip, trip.blocks.find((b) => b.id === id)?.itemId ?? '')?.title ?? ''
 
   const apply = (blocks: Block[], dropped: string[], msg: string) => {
-    setBlocks(applyDay(trip, day, blocks, dropped))
+    setBlocks(applyDay(full, day, blocks, dropped))
     setDone(msg)
   }
 
@@ -346,7 +347,7 @@ function ShiftList({ before, after, ids, title }: { before: Block[]; after: Bloc
 }
 
 function OpenNearby({ here, day, now }: { here: LatLng; day: string; now: number }) {
-  const trip = useStore((s) => s.trip)
+  const trip = useViewTrip(true)
   const addBlock = useStore((s) => s.addBlock)
   const today = dayBlocks(trip, day)
   const nextStart = today.find((b) => b.start > now)?.start ?? 26 * 60

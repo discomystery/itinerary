@@ -4,7 +4,9 @@ import { blankTrip } from './data/blank'
 import { helsinkiTrip } from './data/helsinki'
 import { deviceTimeZone, isTimeZone } from './lib/time'
 import { defaultMapsApp, type MapsApp } from './lib/transit'
-import type { Block, Id, Interest, Item, Person, Trip } from './types'
+import { useMemo } from 'react'
+import { forPerson, hasSplits, TRACK_COLORS, tracksOf, withoutTrack, withTrack } from './lib/tracks'
+import type { Audience, Block, Id, Interest, Item, Person, Track, Trip } from './types'
 
 // All trip data lives behind this one store, so swapping localStorage for a
 // sync backend later only touches this file.
@@ -32,6 +34,8 @@ interface State {
   sampleDismissed: boolean
   /** Just started fresh: offer undo. Not saved. */
   cleared: boolean
+  /** Show the whole group's plans instead of just the viewer's itinerary. This device only. */
+  everyone: boolean
 
   setTab: (t: Tab) => void
   setDay: (d: string) => void
@@ -41,6 +45,7 @@ interface State {
   edit: (id: Id | null) => void
   select: (id: Id | null) => void
   setMapsApp: (a: MapsApp) => void
+  setEveryone: (on: boolean) => void
 
   mutate: (fn: (t: Trip) => Trip) => void
   undo: () => void
@@ -64,6 +69,16 @@ interface State {
   addPerson: (name: string) => void
   updatePerson: (id: Id, p: Partial<Person>) => void
   removePerson: (id: Id) => void
+
+  /** A new track (returns its id), named after its people until it's renamed. */
+  addTrack: (name: string, people?: Id[]) => Id
+  updateTrack: (id: Id, p: Partial<Track>) => void
+  removeTrack: (id: Id) => void
+  /**
+   * Who a card is for. With a block, just that one time on the plan (a repeat
+   * with different people); without, the card and every time it's planned.
+   */
+  setAudience: (itemId: Id, a: Audience, blockId?: Id) => void
 
   replaceTrip: (t: Trip) => void
   /** Clear everything for an empty trip of your own (one undo step). Travel documents stay. */
@@ -95,6 +110,7 @@ export const useStore = create<State>()(
         mapsApp: defaultMapsApp(),
         sampleDismissed: false,
         cleared: false,
+        everyone: false,
 
         setTab: (tab) => set({ tab }),
         setDay: (day) => set({ day }),
@@ -104,6 +120,7 @@ export const useStore = create<State>()(
         edit: (editing) => set({ editing }),
         select: (selected) => set({ selected }),
         setMapsApp: (mapsApp) => set({ mapsApp }),
+        setEveryone: (everyone) => set({ everyone }),
 
         mutate,
         undo: () =>
@@ -190,10 +207,36 @@ export const useStore = create<State>()(
             items: t.items.map((i) => {
               const interest = { ...i.interest }
               delete interest[id]
-              return { ...i, interest }
+              return { ...i, interest, ...(i.who ? { who: i.who.filter((p) => p !== id) } : {}) }
             }),
             blocks: t.blocks.map((b) => (b.who ? { ...b, who: b.who.filter((p) => p !== id) } : b)),
+            tracks: t.tracks?.map((x) => ({ ...x, people: x.people.filter((p) => p !== id) })),
           })),
+
+        addTrack: (name, people = []) => {
+          const id = uid('t')
+          mutate((t) => withTrack(t, { id, name, people, color: TRACK_COLORS[tracksOf(t).length % TRACK_COLORS.length] }))
+          return id
+        },
+        updateTrack: (id, p) =>
+          mutate((t) => {
+            const cur = tracksOf(t).find((x) => x.id === id)
+            return cur ? withTrack(t, { ...cur, ...p, id }) : t
+          }),
+        removeTrack: (id) => mutate((t) => withoutTrack(t, id)),
+        setAudience: (itemId, a, blockId) => {
+          const clean: Audience = a.track ? { track: a.track, who: undefined } : { track: undefined, who: a.who?.length ? a.who : undefined }
+          mutate((t) =>
+            blockId
+              ? { ...t, blocks: t.blocks.map((b) => (b.id === blockId ? { ...b, ...clean } : b)) }
+              : {
+                  ...t,
+                  items: t.items.map((i) => (i.id === itemId ? { ...i, ...clean } : i)),
+                  // The card's audience covers every time it's planned.
+                  blocks: t.blocks.map((b) => (b.itemId === itemId && (b.who || b.track) ? { ...b, who: undefined, track: undefined } : b)),
+                },
+          )
+        },
 
         replaceTrip: (trip) => {
           // Your travel documents are yours: a shared or sample trip doesn't replace them.
@@ -225,13 +268,31 @@ export const useStore = create<State>()(
         }
         return state as State
       },
-      partialize: (s) => ({ trip: s.trip, viewer: s.viewer, organizer: s.organizer, day: s.day, tab: s.tab, simNow: s.simNow, mapsApp: s.mapsApp, sampleDismissed: s.sampleDismissed }),
+      partialize: (s) => ({ trip: s.trip, viewer: s.viewer, organizer: s.organizer, everyone: s.everyone, day: s.day, tab: s.tab, simNow: s.simNow, mapsApp: s.mapsApp, sampleDismissed: s.sampleDismissed }),
     },
   ),
 )
 
 export function useTrip() {
   return useStore((s) => s.trip)
+}
+
+/** Whether screens show just the viewer's itinerary: someone is picked, and some plans are only for part of the group. */
+export function showsMine(s: Pick<State, 'trip' | 'organizer' | 'everyone' | 'viewer'>) {
+  return !s.organizer && !s.everyone && !!s.trip.people.some((p) => p.id === s.viewer) && hasSplits(s.trip)
+}
+
+/**
+ * The trip as the plan screens show it: the viewer's own itinerary, or
+ * everyone's. Read from it, but save through the store's actions (by id), so
+ * other people's plans are never lost.
+ */
+export function useViewTrip(own = false): Trip {
+  const trip = useStore((s) => s.trip)
+  const viewer = useStore((s) => s.viewer)
+  // `own`: Now is always about where you need to be, whatever Plan is showing.
+  const mine = useStore((s) => showsMine(own ? { ...s, everyone: false } : s))
+  return useMemo(() => (mine ? forPerson(trip, viewer) : trip), [trip, viewer, mine])
 }
 
 /** Ideas that are part of the trip (not still waiting in the Inbox). */

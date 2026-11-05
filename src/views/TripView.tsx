@@ -9,7 +9,8 @@ import { downloadTrip, parseTrip, shareLink } from '../lib/share'
 import { dayLabel, dayRange, isTimeZone, timeZones, wallToUtc } from '../lib/time'
 import { MAPS_APP_NAME, type MapsApp, MODES } from '../lib/transit'
 import { useNow } from '../lib/useNow'
-import { SAMPLE_ID, uid, useStore } from '../store'
+import { SAMPLE_ID, uid, useStore, useViewTrip } from '../store'
+import { TracksPanel, travelLine } from '../components/tracks'
 import type { DocKind, TravelDoc, Trip } from '../types'
 
 const DOC_META: Record<DocKind, { label: string; Icon: typeof BookUser; hint: string }> = {
@@ -28,6 +29,8 @@ const span = (t: Trip) => {
 
 export default function TripView() {
   const trip = useStore((s) => s.trip)
+  // Calendar export is your own itinerary, unless you're looking at everyone's.
+  const mine = useViewTrip()
   const viewer = useStore((s) => s.viewer)
   const simNow = useStore((s) => s.simNow)
   const mapsApp = useStore((s) => s.mapsApp)
@@ -100,7 +103,7 @@ export default function TripView() {
               </label>
               <span className="x">
                 <input value={p.name} onChange={(e) => updatePerson(p.id, { name: e.target.value })} aria-label="Name" />
-                <small>{musts(p.id)} must-do{musts(p.id) === 1 ? '' : 's'}</small>
+                <small>{[travelLine(trip, p.id), `${musts(p.id)} must-do${musts(p.id) === 1 ? '' : 's'}`].filter(Boolean).join(' · ')}</small>
               </span>
               {p.id === viewer && !organizer ? <span className="you">You</span> : <button className="sw" onClick={() => setViewer(p.id)}>Vote as</button>}
               {trip.people.length > 1 && p.id !== viewer && (
@@ -131,6 +134,13 @@ export default function TripView() {
           </form>
         </div>
 
+        {trip.people.length > 1 && (
+          <>
+            <div className="sl"><span>Tracks</span><span>Groups with their own plans</span></div>
+            <TracksPanel />
+          </>
+        )}
+
         <div className="sl"><span>Costs</span><span>What's planned so far</span></div>
         <CostPanel trip={trip} onCurrency={(currency) => set({ currency })} />
 
@@ -142,7 +152,7 @@ export default function TripView() {
           <button className="pri" onClick={share}><Link2 />Share link</button>
           <button onClick={() => downloadTrip(trip)}><Download />Export</button>
           <button onClick={() => file.current?.click()}><Upload />Import</button>
-          <button onClick={() => downloadCalendar(trip)} disabled={!trip.blocks.length}><CalendarPlus />Calendar</button>
+          <button onClick={() => downloadCalendar(mine)} disabled={!mine.blocks.length}><CalendarPlus />Calendar</button>
         </div>
         <input
           ref={file}

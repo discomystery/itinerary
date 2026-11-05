@@ -9,9 +9,10 @@ import { daylight } from '../lib/hours'
 import { useFetchRoutes, useRoutes } from '../lib/routeCache'
 import { type DayAnalysis, type Leg, analyzeDay, anchoredSlot, findSlot, interestScore, makeCtx, worstSeverity } from '../lib/schedule'
 import { dayLabel, dayRange } from '../lib/time'
-import { ideas, itemById, useStore } from '../store'
+import { ideas, itemById, useStore, useViewTrip } from '../store'
 import type { Trip } from '../types'
 import { AddSheet, columns, ListView } from './PlanView'
+import { ScopeSwitch } from '../components/tracks'
 
 // The big-screen Plan: every day of the trip at once. Board (the default) puts each
 // day in a column of paper cards with the ideas pool first; Week lays the same plans
@@ -22,7 +23,7 @@ type Mode = 'board' | 'week'
 const DRAG = 'application/x-papermap-item'
 
 export default function BoardView() {
-  const trip = useStore((s) => s.trip)
+  const trip = useViewTrip()
   const day = useStore((s) => s.day)
   const { setDay, select, addBlock } = useStore()
   const routes = useRoutes((s) => s.routes)
@@ -79,6 +80,7 @@ export default function BoardView() {
               <button aria-pressed={mode === 'board'} onClick={() => pickMode('board')} title="Board" aria-label="Board"><Columns3 /></button>
               <button aria-pressed={mode === 'week'} onClick={() => pickMode('week')} title="Week" aria-label="Week"><CalendarRange /></button>
             </span>
+            <ScopeSwitch />
             <button className="fab" onClick={() => setAddTo(day)} aria-label={`Add to ${dayLabel(day)}`}><Plus /></button>
           </>
         }
